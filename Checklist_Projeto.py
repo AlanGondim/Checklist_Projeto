@@ -33,7 +33,7 @@ Base.metadata.create_all(engine)
 
 # --- METODOLOGIA DE IMPLANTACAO ---
 METODOLOGIA = {
-    "Inicialização": ["Proposta Técnica", "Contrato", "Planilha de Orçamento Inicial do projeto", "Alinhamento do Projeto com equipe MV (Pré-Onboarding Comercial)", "Alinhamento do Projeto com o Cliente (Onboarding Comercial)" , "Termo de Abertura (TAP)", "Declaração de Escopo (DEP)],
+    "Inicialização": ["Proposta Técnica", "Contrato", "Planilha de Orçamento Inicial do projeto", "Alinhamento do Projeto com equipe MV (Pré-Onboarding Comercial)", "Alinhamento do Projeto com o Cliente (Onboarding Comercial)" , "Termo de Abertura (TAP)", "Declaração de Escopo (DEP)"],
     "Planejamento": ["Evidência de Kick Off", "Ata de Reunião de Alinhamento de Escopo com o Cliente", "Cronograma do Projeto" , "Plano de Projeto"],
     "Workshop de Processos": ["Levantamento e análise dos Gaps Críticos", "Business Blue Print", "Configuração", "Apresentação da Solução"],
     "Construção": ["Plano de Cutover", "Avaliação do Treinamento", "Progressão das tabelas e configurações"],
@@ -215,4 +215,5 @@ with col_btn:
         with open(path_pdf, "rb") as f:
             st.download_button(label="📥 BAIXAR RELATÓRIO PDF", data=f, 
                                file_name=f"Report_{nome_proj}.pdf", use_container_width=True)
+
 

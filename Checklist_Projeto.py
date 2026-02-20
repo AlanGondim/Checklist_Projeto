@@ -31,14 +31,14 @@ class Projeto(Base):
 
 Base.metadata.create_all(engine)
 
-# --- METODOLOGIA FR.IC.48 ---
+# --- METODOLOGIA DE IMPLANTACAO ---
 METODOLOGIA = {
-    "Inicialização": ["Proposta Técnica", "Contrato", "Planilha de Orçamento Inicial do projeto","Termo de Abertura (TAP)", "Declaração de Escopo (DEP)],
-    "Planejamento": ["Evidência de Kick Off", "Cronograma","Ata de Reunião" , "Plano de Projeto"],
-    "Workshop de Processos": ["Gaps Críticos", "Business Blue Print", "Levantamento de Gaps"],
+    "Inicialização": ["Proposta Técnica", "Contrato", "Planilha de Orçamento Inicial do projeto", "Alinhamento do Projeto com equipe MV (Pré-Onboarding Comercial)", "Alinhamento do Projeto com o Cliente (Onboarding Comercial)" , "Termo de Abertura (TAP)", "Declaração de Escopo (DEP)],
+    "Planejamento": ["Evidência de Kick Off", "Ata de Reunião de Alinhamento de Escopo com o Cliente", "Cronograma do Projeto" , "Plano de Projeto"],
+    "Workshop de Processos": ["Levantamento e análise dos Gaps Críticos", "Business Blue Print", "Configuração", "Apresentação da Solução"],
     "Construção": ["Plano de Cutover", "Avaliação do Treinamento", "Progressão das tabelas e configurações"],
-    "Go Live": ["Carga de Dados", "Escala de Apoio", "Metas de Simulação", Testes Integrados", "Reunião Go/No Go"],
-    "Operação Assistida": ["Suporte In Loco", "Formulário de Pré-Onboarding de Sustentação"],
+    "Go Live": ["Carga de Dados Finais", "Escala de Apoio ao Go Live", "Metas de Simulação", "Testes Integrados", "Reunião Go/No Go"],
+    "Operação Assistida": ["Suporte In Loco aos usuários", "Formulário de Pré-Onboarding de Sustentação"],
     "Finalização": ["Termo de Encerramento", "Registro de Lições Aprendidas - MV Learn - Sharepoint"]
 }
 
@@ -215,3 +215,4 @@ with col_btn:
         with open(path_pdf, "rb") as f:
             st.download_button(label="📥 BAIXAR RELATÓRIO PDF", data=f, 
                                file_name=f"Report_{nome_proj}.pdf", use_container_width=True)
+

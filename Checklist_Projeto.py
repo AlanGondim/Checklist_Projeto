@@ -23,23 +23,23 @@ class Projeto(Base):
     timestamp = Column(DateTime, default=datetime.now)
     inicializacao = Column(Float)
     planejamento = Column(Float)
-    workshop de processos = Column(Float)
+    workshop_de_processos = Column(Float)
     construcao = Column(Float)
     go_live = Column(Float)
-    operacao = Column(Float)
+    operacao_assistida = Column(Float)
     finalizacao = Column(Float)
 
 Base.metadata.create_all(engine)
 
 # --- METODOLOGIA FR.IC.48 ---
 METODOLOGIA = {
-    "Inicialização": ["Checklist de Pré-Onboarding", "Reunião de Alinhamento com o Cliente", "Termo de Abertura (TAP)", "Declaração de Escopo (DEP)"],
-    "Planejamento": ["Agenda de treinamento de tabelas", "Agenda de carga precursora", "Cronograma", "Plano de Projeto"],
-    "Workshop de Processos": ["Análise de Gaps Críticos", "Apresentação do Business Blue Print de Processos"],
-    "Construção": ["Ata de Treinamento", "Plano de Cutover", "Progressão de Tabelas"],
-    "Go Live": ["Carga de Dados", "Escala de Apoio", "Metas de Simulação e Testes Integrados", "Reunião Go/No Go"],
-    "Operação": ["Matriz RACI", "Termo de Aceite da Entrega", "Suporte In Loco", "Identificação de Gaps"],
-    "Finalização": ["Ata de Formalização de Encerramento do Projeto", "Termo de Encerramento", "Registro de Lições Aprendidas - MV Learn"]
+    "Inicialização": ["Proposta Técnica", "Contrato", "Planilha de Orçamento Inicial do projeto","Termo de Abertura (TAP)", "Declaração de Escopo (DEP)],
+    "Planejamento": ["Evidência de Kick Off", "Cronograma","Ata de Reunião" , "Plano de Projeto"],
+    "Workshop de Processos": ["Gaps Críticos", "Business Blue Print", "Levantamento de Gaps"],
+    "Construção": ["Plano de Cutover", "Avaliação do Treinamento", "Progressão das tabelas e configurações"],
+    "Go Live": ["Carga de Dados", "Escala de Apoio", "Metas de Simulação", Testes Integrados", "Reunião Go/No Go"],
+    "Operação Assistida": ["Suporte In Loco", "Formulário de Pré-Onboarding de Sustentação"],
+    "Finalização": ["Termo de Encerramento", "Registro de Lições Aprendidas - MV Learn - Sharepoint"]
 }
 
 # --- GRÁFICO RADAR (PLANEJADO VS REALIZADO) ---
@@ -76,7 +76,7 @@ class PDFExecutivo(FPDF):
         self.set_text_color(255, 255, 255)
         self.cell(0, 20, "STATUS REPORT EXECUTIVO", ln=True, align='C')
         self.set_font('Arial', '', 10)
-        self.cell(0, 5, "HUB DE INTELIGÊNCIA OPERACIONAL | METODOLOGIA FR.IC.48", ln=True, align='C')
+        self.cell(0, 5, "HUB DE INTELIGÊNCIA OPERACIONAL | METODOLOGIA", ln=True, align='C')
         self.ln(20)
 
     def footer(self):
@@ -109,7 +109,7 @@ with c1:
 with c2:
     gp_proj = st.text_input("Gerente de Projeto", placeholder="Nome do Responsável")
 
-st.subheader("📋 Checklist Metodológico")
+st.subheader("📋 Checklist do Projeto")
 perc_fases = {}
 detalhes_entrega = {} # Armazena status individual para o PDF
 cols = st.columns(len(METODOLOGIA))
@@ -205,7 +205,7 @@ with col_btn:
                          f"Recomenda-se priorizar a fase de {[f for f,v in perc_fases.items() if v < 100][0]} " \
                          f"para evitar atrasos no Go Live."
         else:
-            analise_ia = "Análise Concluída: O projeto encontra-se em 100% de conformidade metodológica."
+            analise_ia = "Análise Concluída: O projeto encontra-se em 100% de conformidade com a metodologia de implantação MV."
             
         pdf.multi_cell(0, 8, analise_ia, border=1)
         
@@ -213,6 +213,5 @@ with col_btn:
         pdf.output(path_pdf)
         
         with open(path_pdf, "rb") as f:
-            st.download_button(label="📥 BAIXAR PDF", data=f, 
+            st.download_button(label="📥 BAIXAR RELATÓRIO PDF", data=f, 
                                file_name=f"Report_{nome_proj}.pdf", use_container_width=True)
-

@@ -1,0 +1,6 @@
+streamlit
+pandas
+matplotlib
+numpy
+sqlalchemy
+fpdf2

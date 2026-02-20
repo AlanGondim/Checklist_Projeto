@@ -9,7 +9,7 @@ from fpdf import FPDF
 from datetime import datetime
 import os
 
-# --- DATABASE SETUP (Hub de Inteligência) ---
+# --- DATABASE SETUP ---
 Base = declarative_base()
 engine = create_engine('sqlite:///hub_inteligencia.db')
 Session = sessionmaker(bind=engine)
@@ -21,6 +21,7 @@ class Projeto(Base):
     nome_projeto = Column(String)
     gerente_projeto = Column(String)
     timestamp = Column(DateTime, default=datetime.now)
+    # Colunas nomeadas de forma explícita para evitar erros de mapeamento
     inicializacao = Column(Float)
     planejamento = Column(Float)
     workshop_de_processos = Column(Float)
@@ -33,26 +34,34 @@ Base.metadata.create_all(engine)
 
 # --- METODOLOGIA DE IMPLANTACAO ---
 METODOLOGIA = {
-    "Inicialização": ["Proposta Técnica", "Contrato", "Planilha de Orçamento Inicial do projeto", "Alinhamento do Projeto com equipe MV (Pré-Onboarding Comercial)", "Alinhamento do Projeto com o Cliente (Onboarding Comercial)" , "Termo de Abertura (TAP)", "Declaração de Escopo (DEP)"],
-    "Planejamento": ["Evidência de Kick Off", "Ata de Reunião de Alinhamento de Escopo com o Cliente", "Cronograma do Projeto" , "Plano de Projeto"],
-    "Workshop de Processos": ["Levantamento e análise dos Gaps Críticos", "Business Blue Print", "Configuração", "Apresentação da Solução"],
-    "Construção": ["Plano de Cutover", "Avaliação do Treinamento", "Progressão das tabelas e configurações"],
-    "Go Live": ["Carga de Dados Finais", "Escala de Apoio ao Go Live", "Metas de Simulação", "Testes Integrados", "Reunião Go/No Go"],
-    "Operação Assistida": ["Suporte In Loco aos usuários", "Formulário de Pré-Onboarding de Sustentação"],
-    "Finalização": ["Termo de Encerramento", "Registro de Lições Aprendidas - MV Learn - Sharepoint"]
+    "Inicialização": ["Proposta Técnica", "Contrato", "Planilha de Orçamento Inicial", "Alinhamento MV", "Alinhamento Cliente", "Termo de Abertura (TAP)", "Declaração de Escopo (DEP)"],
+    "Planejamento": ["Evidência de Kick Off", "Ata de Reunião de Alinhamento", "Cronograma do Projeto", "Plano de Projeto"],
+    "Workshop de Processos": ["Gaps Críticos", "Business Blue Print", "Configuração", "Apresentação da Solução"],
+    "Construção": ["Plano de Cutover", "Avaliação do Treinamento", "Progressão das tabelas"],
+    "Go Live": ["Carga de Dados Finais", "Escala de Apoio", "Metas de Simulação", "Testes Integrados", "Reunião Go/No Go"],
+    "Operação Assistida": ["Suporte In Loco", "Pré-Onboarding Sustentação"],
+    "Finalização": ["Termo de Encerramento", "Lições Aprendidas"]
 }
 
-# --- GRÁFICO RADAR (PLANEJADO VS REALIZADO) ---
+# Mapeamento para garantir que o SQLAlchemy encontre as colunas certas
+MAPA_COLUNAS = {
+    "Inicialização": "inicializacao",
+    "Planejamento": "planejamento",
+    "Workshop de Processos": "workshop_de_processos",
+    "Construção": "construcao",
+    "Go Live": "go_live",
+    "Operação Assistida": "operacao_assistida",
+    "Finalização": "finalizacao"
+}
+
+# --- FUNÇÕES DE APOIO (RADAR E PDF MANTIDOS) ---
 def gerar_radar_chart(realizado_dict):
     categorias = list(realizado_dict.keys())
     valores_realizados = list(realizado_dict.values())
     N = len(categorias)
-    
     angulos = [n / float(N) * 2 * np.pi for n in range(N)]
     angulos += angulos[:1]
-    
-    planejado = [100.0] * N
-    planejado += planejado[:1]
+    planejado = [100.0] * N + [100.0]
     realizado = valores_realizados + valores_realizados[:1]
 
     fig, ax = plt.subplots(figsize=(7, 7), subplot_kw=dict(polar=True))
@@ -60,58 +69,36 @@ def gerar_radar_chart(realizado_dict):
     ax.fill(angulos, planejado, color='#1f77b4', alpha=0.05)
     ax.plot(angulos, realizado, color='#ff7f0e', linewidth=3, label="Realizado (%)")
     ax.fill(angulos, realizado, color='#ff7f0e', alpha=0.4)
-
     plt.xticks(angulos[:-1], categorias, color='grey', size=10)
     ax.set_ylim(0, 100)
-    plt.legend(loc='upper right', bbox_to_anchor=(1.2, 1.1))
     return fig
 
-# --- GERAÇÃO DE PDF EXECUTIVO PREMIUM ---
 class PDFExecutivo(FPDF):
     def header(self):
-        # Header azul executivo
         self.set_fill_color(20, 50, 100)
         self.rect(0, 0, 210, 45, 'F')
-        self.set_font('Arial', 'B', 20)
+        self.set_font('Arial', 'B', 18)
         self.set_text_color(255, 255, 255)
         self.cell(0, 20, "STATUS REPORT EXECUTIVO", ln=True, align='C')
-        self.set_font('Arial', '', 10)
-        self.cell(0, 5, "HUB DE INTELIGÊNCIA OPERACIONAL | METODOLOGIA", ln=True, align='C')
-        self.ln(20)
-
+        self.ln(25)
     def footer(self):
         self.set_y(-15)
         self.set_font('Arial', 'I', 8)
-        self.set_text_color(100, 100, 100)
         self.cell(0, 10, f'Página {self.page_no()} | Confidencial', align='C')
-
     def add_watermark(self):
-        self.set_font("Arial", 'B', 50)
-        self.set_text_color(240, 240, 240)
-        with self.rotation(45, 105, 148):
-            self.text(35, 190, "C O N F I D E N C I A L")
+        self.set_font("Arial", 'B', 50); self.set_text_color(240, 240, 240)
+        with self.rotation(45, 105, 148): self.text(35, 190, "C O N F I D E N C I A L")
 
-    def section_title(self, label):
-        self.set_font("Arial", 'B', 12)
-        self.set_fill_color(230, 230, 230)
-        self.set_text_color(0, 0, 0)
-        self.cell(0, 10, label, 0, 1, 'L', True)
-        self.ln(4)
-
-# --- INTERFACE STREAMLIT ---
+# --- INTERFACE ---
 st.set_page_config(page_title="Executive Project Hub", layout="wide")
 st.title("🛡️ Gestão de Entregas e Conformidade")
-st.markdown("---")
 
 c1, c2 = st.columns(2)
-with c1:
-    nome_proj = st.text_input("Nome do Projeto", placeholder="Ex: Implantação Hospital X")
-with c2:
-    gp_proj = st.text_input("Gerente de Projeto", placeholder="Nome do Responsável")
+nome_proj = c1.text_input("Nome do Projeto")
+gp_proj = c2.text_input("Gerente de Projeto")
 
-st.subheader("📋 Checklist do Projeto")
 perc_fases = {}
-detalhes_entrega = {} # Armazena status individual para o PDF
+detalhes_entrega = {}
 cols = st.columns(len(METODOLOGIA))
 
 for i, fase in enumerate(METODOLOGIA.keys()):
@@ -121,38 +108,29 @@ for i, fase in enumerate(METODOLOGIA.keys()):
         detalhes_entrega[fase] = []
         for item in METODOLOGIA[fase]:
             checked = st.checkbox(item, key=f"{fase}_{item}")
-            status = "Concluído" if checked else "Pendente"
-            detalhes_entrega[fase].append({"documento": item, "status": status})
-            if checked:
-                concluidos += 1
+            detalhes_entrega[fase].append({"documento": item, "status": "Concluído" if checked else "Pendente"})
+            if checked: concluidos += 1
         perc = (concluidos / len(METODOLOGIA[fase])) * 100
         perc_fases[fase] = perc
         st.caption(f"Progresso: {perc:.0f}%")
 
-st.markdown("---")
-col_graf, col_btn = st.columns([2, 1])
-
-with col_graf:
-    chart = gerar_radar_chart(perc_fases)
-    st.pyplot(chart)
-    # Salvar o gráfico temporariamente para o PDF
-    chart.savefig("temp_radar.png", bbox_inches='tight')
-
-with col_btn:
-    st.subheader("⚙️ Ações do Hub")
-    
-    if st.button("💾 SALVAR NO HUB DE INTELIGÊNCIA", use_container_width=True):
-        if nome_proj and gp_proj:
-            novo = Projeto(
-                nome_projeto=nome_proj, gerente_projeto=gp_proj,
-                **{k.lower().replace(" ", "_").replace("ç", "c").replace("ã", "a"): v for k, v in perc_fases.items()}
-            )
-            session.add(novo)
-            session.commit()
-            agora = datetime.now().strftime("%H:%M:%S")
-            st.success(f"Dados sincronizados às {agora}!")
-        else:
-            st.error("Preencha os dados do projeto.")
+if st.button("💾 SALVAR NO HUB DE INTELIGÊNCIA", use_container_width=True):
+    if nome_proj and gp_proj:
+        # Criando o objeto de forma segura mapeando fase -> coluna
+        dados_salvamento = {
+            "nome_projeto": nome_proj,
+            "gerente_projeto": gp_proj
+        }
+        for fase_nome, valor in perc_fases.items():
+            coluna_db = MAPA_COLUNAS[fase_nome]
+            dados_salvamento[coluna_db] = valor
+        
+        novo = Projeto(**dados_salvamento)
+        session.add(novo)
+        session.commit()
+        st.success(f"Dados sincronizados às {datetime.now().strftime('%H:%M:%S')}!")
+    else:
+        st.error("Preencha os dados do projeto.")
 
     if st.button("📄 GERAR RELATÓRIO EXECUTIVO PDF", use_container_width=True, type="primary"):
         pdf = PDFExecutivo()
@@ -215,5 +193,6 @@ with col_btn:
         with open(path_pdf, "rb") as f:
             st.download_button(label="📥 BAIXAR RELATÓRIO PDF", data=f, 
                                file_name=f"Report_{nome_proj}.pdf", use_container_width=True)
+
 
 

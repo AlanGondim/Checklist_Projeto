@@ -76,7 +76,7 @@ class PDFExecutivo(FPDF):
         self.set_text_color(255, 255, 255)
         self.cell(0, 20, "STATUS REPORT EXECUTIVO", ln=True, align='C')
         self.set_font('Arial', '', 10)
-        self.cell(0, 5, "HUB DE INTELIGÊNCIA OPERACIONAL | METODOLOGIA FR.IC.48", ln=True, align='C')
+        self.cell(0, 5, "HUB DE INTELIGÊNCIA OPERACIONAL | METODOLOGIA TRADICIONAL", ln=True, align='C')
         self.ln(20)
 
     def footer(self):
@@ -215,3 +215,4 @@ with col_btn:
         with open(path_pdf, "rb") as f:
             st.download_button(label="📥 BAIXAR PDF", data=f, 
                                file_name=f"Report_{nome_proj}.pdf", use_container_width=True)
+

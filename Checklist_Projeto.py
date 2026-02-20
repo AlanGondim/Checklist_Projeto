@@ -33,7 +33,7 @@ Base.metadata.create_all(engine)
 
 # --- METODOLOGIA FR.IC.48 ---
 METODOLOGIA = {
-    "Inicialização": ["Checklist de Pré-Onboarding", "Alinhamento no Cliente", "Termo de Abertura (TAP)", "Declaração de Escopo (DEP)"],
+    "Inicialização": ["Checklist de Pré-Onboarding", "Reunião de Alinhamento com o Cliente", "Termo de Abertura (TAP)", "Declaração de Escopo (DEP)"],
     "Planejamento": ["Agenda de treinamento de tabelas", "Agenda de carga precursora", "Cronograma", "Plano de Projeto"],
     "Workshop de Processos": ["Análise de Gaps Críticos", "Apresentação do Business Blue Print de Processos"],
     "Construção": ["Ata de Treinamento", "Plano de Cutover", "Progressão de Tabelas"],
@@ -215,3 +215,4 @@ with col_btn:
         with open(path_pdf, "rb") as f:
             st.download_button(label="📥 BAIXAR PDF", data=f, 
                                file_name=f"Report_{nome_proj}.pdf", use_container_width=True)
+

@@ -23,7 +23,7 @@ class Projeto(Base):
     timestamp = Column(DateTime, default=datetime.now)
     inicializacao = Column(Float)
     planejamento = Column(Float)
-    desenho = Column(Float)
+    workshop de processos = Column(Float)
     construcao = Column(Float)
     go_live = Column(Float)
     operacao = Column(Float)
@@ -31,15 +31,15 @@ class Projeto(Base):
 
 Base.metadata.create_all(engine)
 
-# --- METODOLOGIA TRADICIONAL ---
+# --- METODOLOGIA FR.IC.48 ---
 METODOLOGIA = {
-    "Inicialização": ["E-Book de Boas Vindas ao novo Cliente", "Checklist de Pré-Onboarding", "Termo de Abertura (TAP)", "Evidência de Kickoff"],
-    "Planejamento": ["Agenda de carga precursora", "Cronograma", "Plano de Projeto"],
-    "Desenho": ["Gaps Críticos", "Processos Hospitalares", "Configuração", "Apresentação Solução"],
-    "Construção": ["Instalação", "Treinamento Operacional", "Dados Mestres", "Plano de Cutover", "Documentos Eletrônicos", "Progresão de tabelas"],
-    "Go Live": ["Carga de Dados", "Escala de Apoio", "Simulação e Testes Integrados", "Reunião Go/No Go"],
-    "Operação": ["Suporte In Loco", "Identificação de Gaps", "Formulário de Pré-Onboarding de Sustentação"],
-    "Finalização": ["Termo de Encerramento", "Registro de Lições Aprendidas - MV Learn Sharepoint"]
+    "Inicialização": ["Checklist de Pré-Onboarding", "Alinhamento no Cliente", "Termo de Abertura (TAP)", "Declaração de Escopo (DEP)"],
+    "Planejamento": ["Agenda de treinamento de tabelas", "Agenda de carga precursora", "Cronograma", "Plano de Projeto"],
+    "Workshop de Processos": ["Análise de Gaps Críticos", "Apresentação do Business Blue Print de Processos"],
+    "Construção": ["Ata de Treinamento", "Plano de Cutover", "Progressão de Tabelas"],
+    "Go Live": ["Carga de Dados", "Escala de Apoio", "Metas de Simulação e Testes Integrados", "Reunião Go/No Go"],
+    "Operação": ["Matriz RACI", "Termo de Aceite da Entrega", "Suporte In Loco", "Identificação de Gaps"],
+    "Finalização": ["Ata de Formalização de Encerramento do Projeto", "Termo de Encerramento", "Registro de Lições Aprendidas - MV Learn"]
 }
 
 # --- GRÁFICO RADAR (PLANEJADO VS REALIZADO) ---
@@ -58,7 +58,7 @@ def gerar_radar_chart(realizado_dict):
     fig, ax = plt.subplots(figsize=(7, 7), subplot_kw=dict(polar=True))
     ax.plot(angulos, planejado, color='#1f77b4', linewidth=2, linestyle='--', label="Ideal (100%)")
     ax.fill(angulos, planejado, color='#1f77b4', alpha=0.05)
-    ax.plot(angulos, realizado, color="#ffb30e", linewidth=3, label="Realizado (%)")
+    ax.plot(angulos, realizado, color='#ff7f0e', linewidth=3, label="Realizado (%)")
     ax.fill(angulos, realizado, color='#ff7f0e', alpha=0.4)
 
     plt.xticks(angulos[:-1], categorias, color='grey', size=10)
@@ -100,7 +100,7 @@ class PDFExecutivo(FPDF):
 
 # --- INTERFACE STREAMLIT ---
 st.set_page_config(page_title="Executive Project Hub", layout="wide")
-st.title("🛡️ Gestão de Entregas e Conformidade do Projeto")
+st.title("🛡️ Gestão de Entregas e Conformidade")
 st.markdown("---")
 
 c1, c2 = st.columns(2)
@@ -109,7 +109,7 @@ with c1:
 with c2:
     gp_proj = st.text_input("Gerente de Projeto", placeholder="Nome do Responsável")
 
-st.subheader("📋 Checklist do Projeto")
+st.subheader("📋 Checklist Metodológico")
 perc_fases = {}
 detalhes_entrega = {} # Armazena status individual para o PDF
 cols = st.columns(len(METODOLOGIA))

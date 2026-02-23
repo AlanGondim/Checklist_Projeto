@@ -35,7 +35,7 @@ Base.metadata.create_all(engine)
 METODOLOGIA = {
     "Inicialização": ["Proposta Técnica", "Contrato", "Planilha de Orçamento Inicial", "Reunião de Alinhamento com equipe MV", "Reunião de Alinhamento com o Cliente", "Ata de Reunião", "Termo de Abertura (TAP)", "Declaração de Escopo (DEP)"],
     "Planejamento": ["Reunião de Kick Off", "Ata de Reunião", "Ata de Reunião de Alinhamento de Escopo com o Cliente", "Cronograma do Projeto", "Plano de Projeto", "Termo de Aceite de Entrega"],
-    "Workshop de Processos": ["Gaps Críticos", "Business Blue Print", "Configuração do Sistema", "Apresentação da Solução", "Termo de Aceite de Entrega"],
+    "Workshop de Processos": ["Análise de Gaps Críticos", "Business Blue Print", "Configuração do Sistema", "Apresentação da Solução", "Termo de Aceite de Entrega"],
     "Construção": ["Plano de Cutover", "Avaliação do Treinamento", "Progressão das tabelas", "Termo de Aceite de Entrega"],
     "Go Live": ["Carga de Dados Finais", "Escala de Apoio", "Metas de Simulação", "Testes Integrados", "Reunião Go/No Go", "Termo de Aceite de Entrega"],
     "Operação Assistida": ["Suporte In Loco aos usuários", " Reunião de Pré-Onboarding Sustentação", "Termo de Aceite de Entrega"],
@@ -215,6 +215,7 @@ with col_btn:
         with open(path_pdf, "rb") as f:
             st.download_button(label="📥 BAIXAR PDF", data=f, 
                                file_name=f"Report_{nome_proj}.pdf", use_container_width=True)
+
 
 
 

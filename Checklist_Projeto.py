@@ -38,7 +38,7 @@ METODOLOGIA = {
     "Workshop de Processos": ["Gaps Críticos", "Business Blue Print", "Configuração do Sistema", "Apresentação da Solução", "Termo de Aceite de Entrega"],
     "Construção": ["Plano de Cutover", "Avaliação do Treinamento", "Progressão das tabelas", "Termo de Aceite de Entrega"],
     "Go Live": ["Carga de Dados Finais", "Escala de Apoio", "Metas de Simulação", "Testes Integrados", "Reunião Go/No Go", "Termo de Aceite de Entrega"],
-    "Operação Assistida": ["Suporte In Loco aos usuários", "Pré-Onboarding Sustentação", "Termo de Aceite de Entrega"],
+    "Operação Assistida": ["Suporte In Loco aos usuários", " Reunião de Pré-Onboarding Sustentação", "Termo de Aceite de Entrega"],
     "Finalização": ["Reunião de Finalização", "Termo de Encerramento", "Registro de Lições Aprendidas MV LEARN - Sharepoint"]
 }
 
@@ -215,6 +215,7 @@ with col_btn:
         with open(path_pdf, "rb") as f:
             st.download_button(label="📥 BAIXAR PDF", data=f, 
                                file_name=f"Report_{nome_proj}.pdf", use_container_width=True)
+
 
 
 

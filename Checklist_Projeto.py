@@ -49,13 +49,13 @@ Base.metadata.create_all(engine)
 
 # --- METODOLOGIA FR.IC.48 ---
 METODOLOGIA = {
-    "Inicialização": ["Proposta Técnica", "Contrato", "Orçamento", "Alinhamento MV", "Alinhamento Cliente", "TAP", "DEP"],
-    "Planejamento": ["Kick Off", "Ata de Reunião", "Cronograma (SGP+)", "Plano de Projeto", "Checklist FR.IC.48"],
-    "Workshop de Processos": ["Análise de Gaps Críticos", "Business Blue Print", "Configuração", "Apresentação da Solução"],
-    "Construção": ["Plano de Cutover", "Avaliação Treinamento", "Tabelas", "Carga Precursora"],
-    "Go Live": ["Carga Final", "Escala Apoio", "Metas de Simulação", "Testes Integrados", "Go/No Go"],
-    "Operação Assistida": ["Suporte In Loco", "Pré-Onboarding", "Identificação de Gaps"],
-    "Finalização": ["Termo de Encerramento", "Lições Aprendidas"]
+    "Inicialização": ["Proposta Técnica", "Contrato assinado", "Orçamento Inicial do Projeto", "Alinhamento do projeto com o time MV", "Ata de reunião" , "Alinhamento Cliente", "TAP - Termo de Abertura do Projeto", "DEP - Declaração de Escopo do Projeto"],
+    "Planejamento": ["EvidÊncia de Kick Off", "Ata de Reunião", "Cronograma do Projeto", "Plano de Projeto"],
+    "Workshop de Processos": ["Levantamento e Análise de Gaps Críticos", "Business Blue Print", "Configuração do Sistema", "Apresentação da Solução", "Termo de Aceite de Entrega"],
+    "Construção": ["Plano de Cutover", "Avaliação de Treinamento", "Lista de Presença" , "Treinamento de Tabelas", "Dados mestres e Carga Precursora", "Homologação de Integração com Terceiros"],
+    "Go Live": ["Carga Final de Dados", "Escala Apoio ao Go Live", "Metas de Simulação", "Testes Integrados", "Reunição de Go/No Go", "Ata de Reunião"],
+    "Operação Assistida": ["Suporte In Loco aos usuários", "Reunião de Pré-Onboarding", "Ata de Reunião", "Identificação de Gaps", "Termo de Aceite de Entrega"],
+    "Finalização": ["Reunião de Finalização", "Ata de Reunião", "TEP - Termo de Encerramento do Projeto", "Registro de Lições Aprendidas - MV LEARN | Sharepoint"]
 }
 
 MAPA_COLUNAS = {
@@ -241,3 +241,4 @@ with col_btn:
             st.download_button("📥 BAIXAR RELATÓRIO PDF", data=pdf_bytes, file_name=f"Status_{nome_proj}.pdf", mime="application/pdf", use_container_width=True)
         else:
             st.warning("Informe o nome do projeto.")
+

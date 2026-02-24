@@ -158,7 +158,7 @@ for i, (fase, valor) in enumerate(perc_fases.items()):
             <div style='text-align: center;'>
                 <div style='display: inline-block; width: 22px; height: 22px; border-radius: 50%; background: {cor_marco}; {borda}'></div>
                 <p style='font-size: 10px; font-weight: bold; color: #143264; margin-top: 5px; margin-bottom: 0;'>{fase}</p>
-                <p style='font-size: 10px; color: #ffb30e; font-weight: bold;'>{valor:.0f}%</p>
+                <p style='font-size: 10px; color: #16537e; font-weight: bold;'>{valor:.0f}%</p>
             </div>
         """, unsafe_allow_html=True)
 
@@ -241,6 +241,7 @@ with col_btn:
             st.download_button("📥 BAIXAR RELATÓRIO PDF", data=pdf_bytes, file_name=f"Status_{nome_proj}.pdf", mime="application/pdf", use_container_width=True)
         else:
             st.warning("Informe o nome do projeto.")
+
 
 
 

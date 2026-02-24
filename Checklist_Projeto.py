@@ -7,6 +7,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from fpdf import FPDF
 from datetime import datetime
+import io
 import os
 
 # --- DATABASE SETUP ---
@@ -69,7 +70,6 @@ def gerar_radar_chart(realizado_dict):
 # --- GERAÇÃO DE PDF EXECUTIVO PREMIUM ---
 class PDFExecutivo(FPDF):
     def header(self):
-        # Header azul executivo
         self.set_fill_color(20, 50, 100)
         self.rect(0, 0, 210, 45, 'F')
         self.set_font('Arial', 'B', 20)
@@ -109,9 +109,10 @@ with c1:
 with c2:
     gp_proj = st.text_input("Gerente de Projeto", placeholder="Nome do Responsável")
 
+# Renderização do Checklist e Cálculo de Progresso
 st.subheader("📋 Checklist do Projeto")
 perc_fases = {}
-detalhes_entrega = {} # Armazena status individual para o PDF
+detalhes_entrega = {} 
 cols = st.columns(len(METODOLOGIA))
 
 for i, fase in enumerate(METODOLOGIA.keys()):
@@ -129,13 +130,26 @@ for i, fase in enumerate(METODOLOGIA.keys()):
         perc_fases[fase] = perc
         st.caption(f"Progresso: {perc:.0f}%")
 
+# --- SPARKLINE DE PROGRESSÃO GLOBAL (ADICIONADO) ---
 st.markdown("---")
+st.subheader("🛤️ Escala de Progressão Global")
+progresso_global = sum(perc_fases.values()) / len(METODOLOGIA)
+
+# CSS para customizar a cor da barra para Azul Marinho (#143264)
+st.markdown(f"""
+    <style>
+    .stProgress > div > div > div > div {{ background-color: #143264; }}
+    </style>
+    """, unsafe_allow_html=True)
+
+st.progress(progresso_global / 100)
+st.markdown(f"<p style='text-align: right; font-weight: bold; color: #143264;'>Conclusão Total: {progresso_global:.1f}%</p>", unsafe_allow_html=True)
+
 col_graf, col_btn = st.columns([2, 1])
 
 with col_graf:
     chart = gerar_radar_chart(perc_fases)
     st.pyplot(chart)
-    # Salvar o gráfico temporariamente para o PDF
     chart.savefig("temp_radar.png", bbox_inches='tight')
 
 with col_btn:
@@ -149,8 +163,7 @@ with col_btn:
             )
             session.add(novo)
             session.commit()
-            agora = datetime.now().strftime("%H:%M:%S")
-            st.success(f"Dados sincronizados às {agora}!")
+            st.success(f"Dados sincronizados às {datetime.now().strftime('%H:%M:%S')}!")
         else:
             st.error("Preencha os dados do projeto.")
 
@@ -160,21 +173,18 @@ with col_btn:
         pdf.add_watermark()
         pdf.set_text_color(0, 0, 0)
         
-        # 1. Informações Básicas
         pdf.set_font("Arial", 'B', 12)
         pdf.cell(0, 8, f"PROJETO: {nome_proj.upper()}", ln=True)
         pdf.cell(0, 8, f"GERENTE: {gp_proj}", ln=True)
         pdf.cell(0, 8, f"DATA DE EMISSÃO: {datetime.now().strftime('%d/%m/%Y')}", ln=True)
+        pdf.cell(0, 8, f"CONCLUSÃO GLOBAL: {progresso_global:.1f}%", ln=True)
         pdf.ln(5)
         
-        # 2. Resumo de Performance (Radar Chart)
         pdf.section_title("MAPA DE MATURIDADE DA IMPLANTAÇÃO")
         pdf.image("temp_radar.png", x=55, y=pdf.get_y(), w=100)
         pdf.set_y(pdf.get_y() + 105)
         
-        # 3. Detalhamento de Entregáveis e Pendências
         pdf.section_title("DETALHAMENTO DE ENTREGÁVEIS POR FASE")
-        
         for fase, itens in detalhes_entrega.items():
             pdf.set_font("Arial", 'B', 10)
             pdf.set_fill_color(245, 245, 245)
@@ -183,7 +193,6 @@ with col_btn:
             
             pdf.set_font("Arial", '', 9)
             for item in itens:
-                # Cor dinâmica: Verde para concluído, Vermelho para pendente
                 if item["status"] == "Concluído":
                     pdf.set_text_color(34, 139, 34)
                 else:
@@ -194,30 +203,25 @@ with col_btn:
                 pdf.set_text_color(0, 0, 0)
             pdf.ln(2)
 
-        # 4. Análise de IA (Insight Automático)
         pdf.ln(5)
         pdf.section_title("ANÁLISE DE PENDÊNCIAS (INSIGHTS)")
         pdf.set_font("Arial", 'I', 10)
         
         pendencias = [i["documento"] for f in detalhes_entrega.values() for i in f if i["status"] == "Pendente"]
         if pendencias:
-            analise_ia = f"Alerta do Sistema: O projeto apresenta {len(pendencias)} pendências documentais. " \
-                         f"Recomenda-se priorizar a fase de {[f for f,v in perc_fases.items() if v < 100][0]} " \
-                         f"para evitar atrasos no Go Live."
+            analise_ia = f"Alerta do Sistema: O projeto apresenta {len(pendencias)} pendências documentais."
         else:
-            analise_ia = "Análise Concluída: O projeto encontra-se em 100% de conformidade metodológica."
+            analise_ia = "Análise Concluída: O projeto encontra-se em 100% de conformidade."
             
         pdf.multi_cell(0, 8, analise_ia, border=1)
         
-        path_pdf = "Relatorio_Premium.pdf"
-        pdf.output(path_pdf)
+        # CORREÇÃO DEFINITIVA: Converter bytearray para bytes
+        pdf_output = bytes(pdf.output())
         
-        with open(path_pdf, "rb") as f:
-            st.download_button(label="📥 BAIXAR PDF", data=f, 
-                               file_name=f"Report_{nome_proj}.pdf", use_container_width=True)
-
-
-
-
-
-
+        st.download_button(
+            label="📥 BAIXAR PDF", 
+            data=pdf_output, 
+            file_name=f"Report_{nome_proj}.pdf", 
+            mime="application/pdf", 
+            use_container_width=True
+        )

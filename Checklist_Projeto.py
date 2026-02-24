@@ -50,7 +50,7 @@ Base.metadata.create_all(engine)
 # --- METODOLOGIA FR.IC.48 ---
 METODOLOGIA = {
     "Inicialização": ["Proposta Técnica", "Contrato assinado", "Orçamento Inicial do Projeto", "Alinhamento do projeto com o time MV", "Ata de reunião" , "Alinhamento Cliente", "TAP - Termo de Abertura do Projeto", "DEP - Declaração de Escopo do Projeto"],
-    "Planejamento": ["EvidÊncia de Kick Off", "Ata de Reunião", "Cronograma do Projeto", "Plano de Projeto"],
+    "Planejamento": ["Evidência de Kick Off", "Ata de Reunião", "Cronograma do Projeto", "Plano de Projeto"],
     "Workshop de Processos": ["Levantamento e Análise de Gaps Críticos", "Business Blue Print", "Configuração do Sistema", "Apresentação da Solução", "Termo de Aceite de Entrega"],
     "Construção": ["Plano de Cutover", "Avaliação de Treinamento", "Lista de Presença" , "Treinamento de Tabelas", "Dados mestres e Carga Precursora", "Homologação de Integração com Terceiros"],
     "Go Live": ["Carga Final de Dados", "Escala Apoio ao Go Live", "Metas de Simulação", "Testes Integrados", "Reunição de Go/No Go", "Ata de Reunião"],
@@ -241,4 +241,5 @@ with col_btn:
             st.download_button("📥 BAIXAR RELATÓRIO PDF", data=pdf_bytes, file_name=f"Status_{nome_proj}.pdf", mime="application/pdf", use_container_width=True)
         else:
             st.warning("Informe o nome do projeto.")
+
 

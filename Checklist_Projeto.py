@@ -123,7 +123,7 @@ class PDFExecutivo(FPDF):
 
 # --- INTERFACE STREAMLIT ---
 st.set_page_config(page_title="Executive Hub de Inteligência", layout="wide")
-st.title("🛡️ Metodologia | Gestão de Entregas e Conformidade de Implantação")
+st.title("🛡️ Metodologia | Gestão de Entregas e Conformidade")
 
 c1, c2 = st.columns(2)
 nome_proj = c1.text_input("Nome do Projeto", placeholder="Ex: Hospital X")
@@ -241,6 +241,7 @@ with col_btn:
             st.download_button("📥 BAIXAR RELATÓRIO PDF", data=pdf_bytes, file_name=f"Status_{nome_proj}.pdf", mime="application/pdf", use_container_width=True)
         else:
             st.warning("Informe o nome do projeto.")
+
 
 
 

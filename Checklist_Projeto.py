@@ -47,7 +47,7 @@ if os.path.exists('hub_inteligencia.db'):
 
 Base.metadata.create_all(engine)
 
-# --- METODOLOGIA FR.IC.48 ---
+# --- METODOLOGIA DE IMPLANTACAO ---
 METODOLOGIA = {
     "Inicialização": ["Proposta Técnica", "Contrato assinado", "Orçamento Inicial do Projeto", "Alinhamento do projeto com o time MV", "Ata de reunião" , "Alinhamento do projeto com o Cliente", "TAP - Termo de Abertura do Projeto", "DEP - Declaração de Escopo do Projeto"],
     "Planejamento": ["Evidência de Kick Off", "Ata de Reunião", "Cronograma do Projeto", "Plano de Projeto"],
@@ -86,7 +86,7 @@ class PDFExecutivo(FPDF):
         self.set_fill_color(20, 50, 100)
         self.rect(0, 0, 210, 45, 'F')
         self.set_font('Helvetica', 'B', 18); self.set_text_color(255, 255, 255)
-        self.cell(190, 20, "STATUS REPORT EXECUTIVO - FR.IC.48", ln=True, align='C')
+        self.cell(190, 20, "STATUS REPORT EXECUTIVO - CHECKLIST DO PROJETO", ln=True, align='C')
         self.ln(25)
 
     def add_watermark(self):
@@ -122,7 +122,7 @@ class PDFExecutivo(FPDF):
             self.text(x_circ - 3, y_pos + 15, f"{valor:.0f}%")
 
 # --- INTERFACE STREAMLIT ---
-st.set_page_config(page_title="Executive Hub FR.IC.48", layout="wide")
+st.set_page_config(page_title="Executive Hub de Inteligência", layout="wide")
 st.title("🛡️ Metodologia | Gestão de Entregas e Conformidade de Implantação")
 
 c1, c2 = st.columns(2)
@@ -241,6 +241,7 @@ with col_btn:
             st.download_button("📥 BAIXAR RELATÓRIO PDF", data=pdf_bytes, file_name=f"Status_{nome_proj}.pdf", mime="application/pdf", use_container_width=True)
         else:
             st.warning("Informe o nome do projeto.")
+
 
 
 

@@ -49,7 +49,7 @@ Base.metadata.create_all(engine)
 
 # --- METODOLOGIA FR.IC.48 ---
 METODOLOGIA = {
-    "Inicialização": ["Proposta Técnica", "Contrato assinado", "Orçamento Inicial do Projeto", "Alinhamento do projeto com o time MV", "Ata de reunião" , "Alinhamento Cliente", "TAP - Termo de Abertura do Projeto", "DEP - Declaração de Escopo do Projeto"],
+    "Inicialização": ["Proposta Técnica", "Contrato assinado", "Orçamento Inicial do Projeto", "Alinhamento do projeto com o time MV", "Ata de reunião" , "Alinhamento do projeto com o Cliente", "TAP - Termo de Abertura do Projeto", "DEP - Declaração de Escopo do Projeto"],
     "Planejamento": ["Evidência de Kick Off", "Ata de Reunião", "Cronograma do Projeto", "Plano de Projeto"],
     "Workshop de Processos": ["Levantamento e Análise de Gaps Críticos", "Business Blue Print", "Configuração do Sistema", "Apresentação da Solução", "Termo de Aceite de Entrega"],
     "Construção": ["Plano de Cutover", "Avaliação de Treinamento", "Lista de Presença" , "Treinamento de Tabelas", "Dados mestres e Carga Precursora", "Homologação de Integração com Terceiros"],
@@ -123,13 +123,13 @@ class PDFExecutivo(FPDF):
 
 # --- INTERFACE STREAMLIT ---
 st.set_page_config(page_title="Executive Hub FR.IC.48", layout="wide")
-st.title("🛡️ Gestão de Entregas e Conformidade")
+st.title("🛡️ Gestão de Entregas e Conformidade com a Metodologia de Implantação")
 
 c1, c2 = st.columns(2)
 nome_proj = c1.text_input("Nome do Projeto", placeholder="Ex: Hospital X")
 gp_proj = c2.text_input("Gerente de Projeto")
 
-st.write("### 📋 Checklist Metodológico")
+st.write("### 📋 Checklist do Projeto")
 tabs = st.tabs(list(METODOLOGIA.keys()))
 perc_fases, detalhes_entrega = {}, {}
 
@@ -241,5 +241,6 @@ with col_btn:
             st.download_button("📥 BAIXAR RELATÓRIO PDF", data=pdf_bytes, file_name=f"Status_{nome_proj}.pdf", mime="application/pdf", use_container_width=True)
         else:
             st.warning("Informe o nome do projeto.")
+
 
 

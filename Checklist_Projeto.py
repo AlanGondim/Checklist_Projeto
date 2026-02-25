@@ -82,6 +82,14 @@ class PDFExecutivo(FPDF):
         self.cell(140, 10, "METODOLOGIA - CHECKLIST DO PROJETO", ln=True, align='C')
         self.ln(20)
 
+    def footer(self):
+        # Rodapé com Protocolo de Auditoria e Timestamp
+        self.set_y(-15)
+        self.set_font('Helvetica', 'I', 8)
+        self.set_text_color(128, 128, 128)
+        timestamp_audit = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        self.cell(0, 10, f"Protocolo de Auditoria: {timestamp_audit} | Documento Gerado via Hub de Inteligência | Pagina {self.page_no()}", 0, 0, 'C')
+    
     def add_watermark(self):
         self.set_font("Helvetica", 'B', 50); self.set_text_color(248, 248, 248)
         with self.rotation(45, 105, 148):
@@ -179,10 +187,8 @@ with col_btn:
     if st.button("💾 SALVAR NO HUB DE INTELIGÊNCIA", use_container_width=True):
         if nome_p:
             try:
-                # Captura o momento exato do clique
                 agora = datetime.now()
-                data_formatada = agora.strftime("%d/%m/%Y")
-                hora_formatada = agora.strftime("%H:%M:%S")
+                data_hora_save = agora.strftime("%d/%m/%Y às %H:%M:%S")
                 
                 novo_projeto = Projeto(
                     nome_projeto=nome_p, gerente_projeto=gp_p, oportunidade=oportunidade,
@@ -232,6 +238,7 @@ with col_btn:
                 pdf.ln(1)
         
         st.download_button("📥 BAIXAR RELATORIO PDF", data=bytes(pdf.output()), file_name=f"Checklist_Projeto_{nome_p}.pdf", mime="application/pdf", use_container_width=True)
+
 
 
 

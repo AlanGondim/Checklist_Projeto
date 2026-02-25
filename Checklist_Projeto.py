@@ -2,13 +2,12 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, inspect
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from fpdf import FPDF
 from datetime import datetime
 import io
-import base64
 import os
 
 # --- DATABASE SETUP ---
@@ -41,7 +40,7 @@ class Projeto(Base):
 
 Base.metadata.create_all(engine)
 
-# --- METODOLOGIA DE IMPLANTACAO ---
+# --- METODOLOGIA ---
 METODOLOGIA = {
     "Inicialização": ["Proposta Técnica", "Contrato assinado", "Orçamento Inicial", "Alinhamento time MV", "Ata de reunião", "Alinhamento Cliente", "TAP", "DEP"],
     "Planejamento": ["Evidência de Kick Off", "Ata de Reunião", "Cronograma", "Plano de Projeto"],
@@ -78,10 +77,8 @@ class PDFExecutivo(FPDF):
     def header(self):
         self.set_fill_color(20, 50, 100)
         self.rect(0, 0, 210, 40, 'F')
-        
         if os.path.exists("Logomarca MV Atualizada.png"):
             self.image("Logomarca MV Atualizada.png", x=10, y=8, w=22)
-            
         self.set_font('Helvetica', 'B', 16); self.set_text_color(255, 255, 255)
         self.set_xy(35, 15)
         self.cell(140, 10, "STATUS REPORT EXECUTIVO - HUB DE INTELIGÊNCIA", ln=True, align='C')
@@ -95,30 +92,21 @@ class PDFExecutivo(FPDF):
     def desenhar_sparkline_pdf(self, perc_fases, y_pos):
         x_start, largura_total = 25, 160
         passo = largura_total / (len(perc_fases) - 1)
-        
-        # Linha de conexão
         self.set_draw_color(200, 200, 200); self.set_line_width(0.8)
         self.line(x_start, y_pos + 5, x_start + largura_total, y_pos + 5)
         
         for i, (fase, valor) in enumerate(perc_fases.items()):
             x_circ = x_start + (i * passo)
-            
-            if valor > 0:
-                self.set_fill_color(20, 50, 100) # Azul Marinho
-                self.set_draw_color(255, 179, 14) # Borda Amarela
-                self.set_line_width(0.8)
+            if valor >= 100:
+                self.set_fill_color(20, 50, 100); self.set_draw_color(20, 50, 100); self.set_line_width(0.1)
+            elif valor > 0:
+                self.set_fill_color(20, 50, 100); self.set_draw_color(255, 179, 14); self.set_line_width(0.8)
             else:
-                self.set_fill_color(230, 230, 230) # Cinza Inativo
-                self.set_draw_color(200, 200, 200)
-                self.set_line_width(0.2)
+                self.set_fill_color(230, 230, 230); self.set_draw_color(200, 200, 200); self.set_line_width(0.2)
                 
             self.ellipse(x_circ - 3, y_pos + 2, 6, 6, 'FD')
-            
-            # Legendas
             self.set_font("Helvetica", 'B', 6); self.set_text_color(20, 50, 100)
             self.text(x_circ - 8, y_pos + 12, fase[:15])
-            self.set_font("Helvetica", '', 5); self.set_text_color(100, 100, 100)
-            self.text(x_circ - 3, y_pos + 15, f"{valor:.0f}%")
 
 # --- INTERFACE STREAMLIT ---
 st.set_page_config(page_title="Executive Hub", layout="wide")
@@ -136,9 +124,10 @@ with st.container():
     resp_verificacao = c6.text_input("Responsável pela Verificação")
 
     c7, c8, c9 = st.columns(3)
-    d_inicio = c7.date_input("Data de Início")
-    d_termino = c8.date_input("Data de Término")
-    d_producao = c9.date_input("Entrada em Produção")
+    # Formatação de data padrão Brasil dd/mm/aaaa
+    d_inicio = c7.date_input("Data de Início", format="DD/MM/YYYY")
+    d_termino = c8.date_input("Data de Término", format="DD/MM/YYYY")
+    d_producao = c9.date_input("Entrada em Produção", format="DD/MM/YYYY")
 
 st.write("### 📋 Checklist do Projeto")
 tabs = st.tabs(list(METODOLOGIA.keys()))
@@ -155,7 +144,7 @@ for i, (fase, itens) in enumerate(METODOLOGIA.items()):
             if checked: concluidos += 1
         perc_fases[fase] = (concluidos / len(itens)) * 100
 
-# --- ESCALA DE PROGRESSÃO ESTILIZADA (MARCOS) ---
+# --- ESCALA DE PROGRESSÃO (LOGICA DE CIRCULO COMPLETO VS EM ANDAMENTO) ---
 st.markdown("---")
 global_avg = sum(perc_fases.values()) / len(perc_fases)
 st.write(f"### 🛤️ Evolução Metodológica: {global_avg:.1f}%")
@@ -163,14 +152,19 @@ st.write(f"### 🛤️ Evolução Metodológica: {global_avg:.1f}%")
 cols_spark = st.columns(len(perc_fases))
 for i, (fase, valor) in enumerate(perc_fases.items()):
     with cols_spark[i]:
-        # Padrão: Azul Marinho com Borda Amarela se iniciado
+        # Logica: 100% = Azul Marinho liso. < 100% e > 0% = Azul Marinho com Borda Amarela.
         cor_circulo = "#143264" if valor > 0 else "#eeeeee"
-        estilo_borda = "border: 3px solid #ffb30e;" if valor > 0 else "border: 1px solid #cccccc;"
+        if valor >= 100:
+            estilo_borda = f"border: 3px solid #143264;"
+        elif valor > 0:
+            estilo_borda = f"border: 3px solid #ffb30e;"
+        else:
+            estilo_borda = "border: 1px solid #cccccc;"
         
         st.markdown(f"""
             <div style='text-align: center; padding: 10px;'>
                 <div style='display: inline-block; width: 25px; height: 25px; border-radius: 50%; background: {cor_circulo}; {estilo_borda}'></div>
-                <p style='font-size: 11px; font-weight: bold; color: #143264; margin-top: 5px; line-height: 1.1;'>{fase}</p>
+                <p style='font-size: 11px; font-weight: bold; color: #143264; margin-top: 5px;'>{fase}</p>
                 <p style='font-size: 10px; color: #666;'>{valor:.0f}%</p>
             </div>
         """, unsafe_allow_html=True)
@@ -196,7 +190,9 @@ with col_btn:
             dados_db = {
                 "nome_projeto": nome_p, "gerente_projeto": gp_p, "oportunidade": oportunidade,
                 "horas_contratadas": horas_cont, "tipo": tipo_p, "responsavel_verificacao": resp_verificacao,
-                "data_inicio": str(d_inicio), "data_termino": str(d_termino), "data_producao": str(d_producao)
+                "data_inicio": d_inicio.strftime("%d/%m/%Y"), 
+                "data_termino": d_termino.strftime("%d/%m/%Y"), 
+                "data_producao": d_producao.strftime("%d/%m/%Y")
             }
             for f, v in perc_fases.items(): dados_db[MAPA_COLUNAS[f]] = v
             session.add(Projeto(**dados_db))
@@ -209,32 +205,29 @@ with col_btn:
         pdf = PDFExecutivo()
         pdf.add_page(); pdf.add_watermark()
         
-        # Grid de Informações
-        pdf.set_font("Helvetica", 'B', 8); pdf.set_text_color(20, 50, 100)
-        pdf.set_fill_color(245, 245, 245)
+        pdf.set_font("Helvetica", 'B', 8); pdf.set_text_color(20, 50, 100); pdf.set_fill_color(245, 245, 245)
         
+        # Grid de Informações com datas formatadas dd/mm/aaaa
         pdf.cell(63, 7, f" PROJETO: {nome_p.upper()}", 1, 0, 'L', True)
         pdf.cell(63, 7, f" OPORTUNIDADE: {oportunidade}", 1, 0, 'L', True)
         pdf.cell(64, 7, f" GP: {gp_p}", 1, 1, 'L', True)
         
         pdf.cell(63, 7, f" HORAS: {horas_cont}", 1, 0, 'L')
         pdf.cell(63, 7, f" TIPO: {tipo_p}", 1, 0, 'L')
-        pdf.cell(64, 7, f" RESP. VERIFICAÇÃO: {resp_verificacao}", 1, 1, 'L')
+        pdf.cell(64, 7, f" RESP. VERIFICACAO: {resp_verificacao}", 1, 1, 'L')
         
-        pdf.cell(63, 7, f" INÍCIO: {d_inicio}", 1, 0, 'L', True)
-        pdf.cell(63, 7, f" TÉRMINO: {d_termino}", 1, 0, 'L', True)
-        pdf.cell(64, 7, f" PRODUÇÃO: {d_producao}", 1, 1, 'L', True)
+        pdf.cell(63, 7, f" INICIO: {d_inicio.strftime('%d/%m/%Y')}", 1, 0, 'L', True)
+        pdf.cell(63, 7, f" TERMINO: {d_termino.strftime('%d/%m/%Y')}", 1, 0, 'L', True)
+        pdf.cell(64, 7, f" PRODUCAO: {d_producao.strftime('%d/%m/%Y')}", 1, 1, 'L', True)
         
         pdf.ln(5)
-        # Sparkline no PDF com destaque Amarelo/Azul
         pdf.desenhar_sparkline_pdf(perc_fases, pdf.get_y())
         pdf.set_y(pdf.get_y() + 20)
         
-        # Radar e Diagnóstico
         pdf.image(img_buf, x=65, w=80); pdf.ln(80)
         
         pdf.set_fill_color(255, 243, 205); pdf.set_font("Helvetica", 'B', 10)
-        pdf.cell(190, 8, "DIAGNÓSTICO IA: PENDÊNCIAS E PRÓXIMOS PASSOS", 0, 1, 'L', True); pdf.ln(2)
+        pdf.cell(190, 8, "DIAGNOSTICO IA: PENDENCIAS E PROXIMOS PASSOS", 0, 1, 'L', True); pdf.ln(2)
         pdf.set_font("Helvetica", '', 8); pdf.set_text_color(50, 50, 50)
         
         for fase, itens in detalhes_entrega.items():

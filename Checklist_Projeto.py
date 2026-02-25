@@ -179,6 +179,11 @@ with col_btn:
     if st.button("💾 SALVAR NO HUB DE INTELIGÊNCIA", use_container_width=True):
         if nome_p:
             try:
+                # Captura o momento exato do clique
+                agora = datetime.now()
+                data_formatada = agora.strftime("%d/%m/%Y")
+                hora_formatada = agora.strftime("%H:%M:%S")
+                
                 novo_projeto = Projeto(
                     nome_projeto=nome_p, gerente_projeto=gp_p, oportunidade=oportunidade,
                     horas_contratadas=horas_cont, tipo=tipo_p, responsavel_verificacao=resp_verificacao,
@@ -190,7 +195,8 @@ with col_btn:
                 session.add(novo_projeto)
                 session.commit()
                 st.success(f"✅ Snapshot de '{nome_p}' salvo com sucesso!")
-                st.rerun()
+                st.info(f"📅 **Data:** {data_formatada} | 🕒 **Hora:** {hora_formatada}")
+                st.toast(f"Protocolado em {data_formatada} às {hora_formatada}", icon='🚀')
             except Exception as e:
                 session.rollback()
                 st.error(f"Erro ao salvar: {e}")
@@ -226,6 +232,7 @@ with col_btn:
                 pdf.ln(1)
         
         st.download_button("📥 BAIXAR RELATORIO PDF", data=bytes(pdf.output()), file_name=f"Checklist_Projeto_{nome_p}.pdf", mime="application/pdf", use_container_width=True)
+
 
 
 

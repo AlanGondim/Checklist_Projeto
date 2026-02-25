@@ -7,6 +7,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from fpdf import FPDF
 from datetime import datetime
+import qrcode
 import io
 import os
 
@@ -35,16 +36,15 @@ class Projeto(Base):
     go_live = Column(Float); operacao_assistida = Column(Float)
     finalizacao = Column(Float)
 
-# Garante que as colunas existam
 Base.metadata.create_all(engine)
 
 # --- METODOLOGIA ---
 METODOLOGIA = {
     "Inicialização": ["Proposta Técnica", "Contrato assinado", "Orçamento Inicial", "Alinhamento time MV", "Ata de reunião", "Alinhamento Cliente", "TAP", "DEP"],
-    "Planejamento": ["Evidência de Kick Off", "Ata de Reunião", "Cronograma", "Plano de Projeto"],
+    "Planejamento": ["Evidência de Kick Off", "Ata de Reunião", "Cronograma do Projeto", "Plano de Projeto"],
     "Workshop de Processos": ["Análise de Gaps Críticos", "Business Blue Print", "Configuração do Sistema", "Apresentação da Solução", "Termo de Aceite"],
     "Construção": ["Plano de Cutover", "Avaliação de Treinamento", "Lista de Presença", "Treinamento de Tabelas", "Carga Precursora", "Homologação Integração"],
-    "Go Live": ["Carga Final de Dados", "Escala Apoio Go Live", "Metas de Simulação", "Testes Integrados", "Reunição Go/No Go", "Ata de Reunião"],
+    "Go Live": ["Carga Final de Dados", "Escala Apoio Go Live", "Metas de Simulação", "Testes Integrados", "Reunião Go/No Go", "Ata de Reunião"],
     "Operação Assistida": ["Suporte In Loco", "Pré-Onboarding", "Ata de Reunião", "Identificação de Gaps", "Termo de Aceite"],
     "Finalização": ["Reunião de Finalização", "Ata de Reunião", "TEP", "Lições Aprendidas"]
 }
@@ -71,6 +71,16 @@ def gerar_radar_chart(realizado_dict):
     plt.xticks(angulos[:-1], categorias, size=7, fontweight='bold')
     return fig
 
+def gerar_qrcode(link):
+    qr = qrcode.QRCode(version=1, box_size=10, border=2)
+    qr.add_data(link)
+    qr.make(fit=True)
+    img_qr = qr.make_image(fill_color="#143264", back_color="white")
+    buf = io.BytesIO()
+    img_qr.save(buf, format='PNG')
+    buf.seek(0)
+    return buf
+
 class PDFExecutivo(FPDF):
     def header(self):
         self.set_fill_color(20, 50, 100)
@@ -83,13 +93,12 @@ class PDFExecutivo(FPDF):
         self.ln(20)
 
     def footer(self):
-        # Rodapé com Protocolo de Auditoria e Timestamp
         self.set_y(-15)
         self.set_font('Helvetica', 'I', 8)
         self.set_text_color(128, 128, 128)
         timestamp_audit = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        self.cell(0, 10, f"Protocolo de Auditoria: {timestamp_audit} | Documento Gerado via Hub de Inteligência | Pagina {self.page_no()}", 0, 0, 'C')
-    
+        self.cell(0, 10, f"Protocolo de Auditoria: {timestamp_audit} | Verifique a autenticidade no Hub | Pagina {self.page_no()}", 0, 0, 'C')
+
     def add_watermark(self):
         self.set_font("Helvetica", 'B', 50); self.set_text_color(248, 248, 248)
         with self.rotation(45, 105, 148):
@@ -100,7 +109,6 @@ class PDFExecutivo(FPDF):
         passo = largura_total / (len(perc_fases) - 1)
         self.set_draw_color(200, 200, 200); self.set_line_width(0.8)
         self.line(x_start, y_pos + 5, x_start + largura_total, y_pos + 5)
-        
         for i, (fase, valor) in enumerate(perc_fases.items()):
             x_circ = x_start + (i * passo)
             if valor >= 100:
@@ -109,7 +117,6 @@ class PDFExecutivo(FPDF):
                 self.set_fill_color(20, 50, 100); self.set_draw_color(255, 179, 14); self.set_line_width(0.8)
             else:
                 self.set_fill_color(230, 230, 230); self.set_draw_color(200, 200, 200)
-                
             self.ellipse(x_circ - 3, y_pos + 2, 6, 6, 'FD')
             self.set_font("Helvetica", 'B', 6); self.set_text_color(20, 50, 100)
             self.text(x_circ - 8, y_pos + 12, fase[:15])
@@ -118,13 +125,11 @@ class PDFExecutivo(FPDF):
 st.set_page_config(page_title="Checklist do Projeto", layout="wide")
 st.title("🏛️ Metodologia | Checklist de Projeto")
 
-# Busca de Projeto no Hub
 with st.sidebar:
     st.header("🔍 Buscar no Hub")
     projetos_salvos = [p.nome_projeto for p in session.query(Projeto.nome_projeto).distinct().all()]
     projeto_busca = st.selectbox("Carregar Projeto Existente", [""] + projetos_salvos)
 
-# --- CAMPOS EXECUTIVOS ---
 with st.container():
     c1, c2, c3 = st.columns(3)
     nome_p = c1.text_input("Nome do Projeto", value=projeto_busca if projeto_busca else "")
@@ -132,8 +137,8 @@ with st.container():
     gp_p = c3.text_input("Gerente de Projeto")
 
     c4, c5, c6 = st.columns(3)
-    horas_cont = c4.number_input("Horas Contratadas", min_value=0.0, step=10.0 )
-    tipo_p = c5.selectbox("Tipo", ["Implantação", "Migração" , "Revitalização", "Consultoria"])
+    horas_cont = c4.number_input("Horas Contratadas", min_value=0.0, step=10.0)
+    tipo_p = c5.selectbox("Tipo", ["Implantação", "Migração", "Revitalização", "Consultoria"])
     resp_verificacao = c6.text_input("Responsável pela Verificação")
 
     c7, c8, c9 = st.columns(3)
@@ -156,7 +161,6 @@ for i, (fase, itens) in enumerate(METODOLOGIA.items()):
             if checked: concluidos += 1
         perc_fases[fase] = (concluidos / len(itens)) * 100
 
-# --- ESCALA DE PROGRESSÃO ---
 st.markdown("---")
 global_avg = sum(perc_fases.values()) / len(perc_fases)
 st.write(f"### 🛤️ Evolução da Implantação: {global_avg:.1f}%")
@@ -170,7 +174,6 @@ for i, (fase, valor) in enumerate(perc_fases.items()):
 
 st.progress(global_avg / 100)
 
-# --- HUB DE AÇÕES ---
 st.markdown("---")
 col_graf, col_btn = st.columns([1.5, 1])
 
@@ -189,20 +192,18 @@ with col_btn:
             try:
                 agora = datetime.now()
                 data_hora_save = agora.strftime("%d/%m/%Y às %H:%M:%S")
-                
                 novo_projeto = Projeto(
                     nome_projeto=nome_p, gerente_projeto=gp_p, oportunidade=oportunidade,
                     horas_contratadas=horas_cont, tipo=tipo_p, responsavel_verificacao=resp_verificacao,
-                    data_inicio=d_inicio.strftime("%d/%m/%Y"), 
-                    data_termino=d_termino.strftime("%d/%m/%Y"), 
-                    data_producao=d_producao.strftime("%d/%m/%Y"),
+                    data_inicio=d_inicio.strftime("%d/%m/%Y"), data_termino=d_termino.strftime("%d/%m/%Y"), 
+                    data_producao=d_producao.strftime("%d/%m/%Y"), timestamp=agora,
                     **{MAPA_COLUNAS[f]: v for f, v in perc_fases.items()}
                 )
                 session.add(novo_projeto)
                 session.commit()
                 st.success(f"✅ Snapshot de '{nome_p}' salvo com sucesso!")
-                st.info(f"📅 **Data:** {data_formatada} | 🕒 **Hora:** {hora_formatada}")
-                st.toast(f"Protocolado em {data_formatada} às {hora_formatada}", icon='🚀')
+                st.info(f"🕒 Registro efetuado em: {data_hora_save}")
+                st.toast(f"Protocolado: {data_hora_save}")
             except Exception as e:
                 session.rollback()
                 st.error(f"Erro ao salvar: {e}")
@@ -213,19 +214,28 @@ with col_btn:
         pdf = PDFExecutivo()
         pdf.add_page(); pdf.add_watermark()
         
-        # Grid Executiva dd/mm/aaaa
         pdf.set_font("Helvetica", 'B', 8); pdf.set_text_color(20, 50, 100); pdf.set_fill_color(245, 245, 245)
         pdf.cell(63, 7, f" PROJETO: {nome_p.upper()}", 1, 0, 'L', True)
         pdf.cell(63, 7, f" OPORTUNIDADE: {oportunidade}", 1, 0, 'L', True)
         pdf.cell(64, 7, f" GP: {gp_p}", 1, 1, 'L', True)
         pdf.cell(63, 7, f" INICIO: {d_inicio.strftime('%d/%m/%Y')}", 1, 0, 'L')
         pdf.cell(63, 7, f" TERMINO: {d_termino.strftime('%d/%m/%Y')}", 1, 0, 'L')
-        pdf.cell(64, 7, f" PRODUCAO: {d_producao.strftime('%d/%m/%Y')}", 1, 1, 'L')
+        pdf.cell(64, 7, f" PRODUÇÃO: {d_producao.strftime('%d/%m/%Y')}", 1, 1, 'L')
         
         pdf.ln(5); pdf.desenhar_sparkline_pdf(perc_fases, pdf.get_y()); pdf.set_y(pdf.get_y() + 20)
+
+        # Gráfico Radar
         pdf.image(img_buf, x=65, w=80); pdf.ln(80)
         
-        # Detalhamento IA
+        # QR Code de Autenticidade (Simulando link para o Hub)
+        link_autenticidade = f"https://hub-inteligencia.mv.com.br/validar?projeto={nome_p.replace(' ', '%20')}"
+        qr_buf = gerar_qrcode(link_autenticidade)
+        pdf.image(qr_buf, x=175, y=45, w=25)
+        pdf.set_xy(175, 70); pdf.set_font("Helvetica", 'I', 6); pdf.cell(25, 5, "Escanear para Validar", 0, 0, 'C')
+
+        
+
+        # Diagnóstico IA
         pdf.set_fill_color(255, 243, 205); pdf.set_font("Helvetica", 'B', 10)
         pdf.cell(190, 8, " INTELIGENCIA DE ENTREGA: DIAGNOSTICO DE PENDENCIAS", 0, 1, 'L', True)
         pdf.set_font("Helvetica", '', 8); pdf.set_text_color(50, 50, 50)
@@ -238,14 +248,3 @@ with col_btn:
                 pdf.ln(1)
         
         st.download_button("📥 BAIXAR RELATORIO PDF", data=bytes(pdf.output()), file_name=f"Checklist_Projeto_{nome_p}.pdf", mime="application/pdf", use_container_width=True)
-
-
-
-
-
-
-
-
-
-
-

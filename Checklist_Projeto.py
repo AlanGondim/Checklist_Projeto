@@ -11,7 +11,7 @@ import io
 import base64
 import os
 
-# --- DATABASE SETUP & AUTO-FIX ---
+# --- DATABASE SETUP ---
 Base = declarative_base()
 DB_NAME = 'sqlite:///hub_inteligencia.db'
 engine = create_engine(DB_NAME)
@@ -39,16 +39,15 @@ class Projeto(Base):
     operacao_assistida = Column(Float)
     finalizacao = Column(Float)
 
-# Reset do DB para garantir novas colunas (Remova em produção se houver dados críticos)
 Base.metadata.create_all(engine)
 
 # --- METODOLOGIA DE IMPLANTACAO ---
 METODOLOGIA = {
     "Inicialização": ["Proposta Técnica", "Contrato assinado", "Orçamento Inicial", "Alinhamento time MV", "Ata de reunião", "Alinhamento Cliente", "TAP", "DEP"],
-    "Planejamento": ["Evidência de Kick Off", "Ata de Reunião", "Cronograma do Projeto", "Plano de Projeto"],
+    "Planejamento": ["Evidência de Kick Off", "Ata de Reunião", "Cronograma", "Plano de Projeto"],
     "Workshop de Processos": ["Análise de Gaps Críticos", "Business Blue Print", "Configuração do Sistema", "Apresentação da Solução", "Termo de Aceite"],
     "Construção": ["Plano de Cutover", "Avaliação de Treinamento", "Lista de Presença", "Treinamento de Tabelas", "Carga Precursora", "Homologação Integração"],
-    "Go Live": ["Carga Final de Dados", "Escala Apoio Go Live", "Metas de Simulação", "Testes Integrados", "Reunião Go/No Go", "Ata de Reunião"],
+    "Go Live": ["Carga Final de Dados", "Escala Apoio Go Live", "Metas de Simulação", "Testes Integrados", "Reunição Go/No Go", "Ata de Reunião"],
     "Operação Assistida": ["Suporte In Loco", "Pré-Onboarding", "Ata de Reunião", "Identificação de Gaps", "Termo de Aceite"],
     "Finalização": ["Reunião de Finalização", "Ata de Reunião", "TEP", "Lições Aprendidas"]
 }
@@ -80,7 +79,6 @@ class PDFExecutivo(FPDF):
         self.set_fill_color(20, 50, 100)
         self.rect(0, 0, 210, 40, 'F')
         
-        # Logomarca (Certifique-se que o arquivo existe)
         if os.path.exists("Logomarca MV Atualizada.png"):
             self.image("Logomarca MV Atualizada.png", x=10, y=8, w=22)
             
@@ -95,23 +93,37 @@ class PDFExecutivo(FPDF):
             self.text(40, 160, "C O N F I D E N C I A L")
 
     def desenhar_sparkline_pdf(self, perc_fases, y_pos):
-        x_start, largura_total = 20, 170
+        x_start, largura_total = 25, 160
         passo = largura_total / (len(perc_fases) - 1)
-        self.set_draw_color(200, 200, 200); self.set_line_width(0.5)
+        
+        # Linha de conexão
+        self.set_draw_color(200, 200, 200); self.set_line_width(0.8)
         self.line(x_start, y_pos + 5, x_start + largura_total, y_pos + 5)
+        
         for i, (fase, valor) in enumerate(perc_fases.items()):
             x_circ = x_start + (i * passo)
-            cor = (20, 50, 100) if valor > 0 else (220, 220, 220)
-            self.set_fill_color(*cor)
-            self.ellipse(x_circ - 2, y_pos + 3, 4, 4, 'FD')
-            self.set_font("Helvetica", 'B', 5); self.set_text_color(20, 50, 100)
-            self.text(x_circ - 6, y_pos + 10, fase[:12])
+            
+            if valor > 0:
+                self.set_fill_color(20, 50, 100) # Azul Marinho
+                self.set_draw_color(255, 179, 14) # Borda Amarela
+                self.set_line_width(0.8)
+            else:
+                self.set_fill_color(230, 230, 230) # Cinza Inativo
+                self.set_draw_color(200, 200, 200)
+                self.set_line_width(0.2)
+                
+            self.ellipse(x_circ - 3, y_pos + 2, 6, 6, 'FD')
+            
+            # Legendas
+            self.set_font("Helvetica", 'B', 6); self.set_text_color(20, 50, 100)
+            self.text(x_circ - 8, y_pos + 12, fase[:15])
+            self.set_font("Helvetica", '', 5); self.set_text_color(100, 100, 100)
+            self.text(x_circ - 3, y_pos + 15, f"{valor:.0f}%")
 
 # --- INTERFACE STREAMLIT ---
 st.set_page_config(page_title="Executive Hub", layout="wide")
 st.title("🛡️ Metodologia | Gestão de Entregas e Conformidade")
 
-# --- CAMPOS DE DADOS DO PROJETO ---
 with st.container():
     c1, c2, c3 = st.columns(3)
     nome_p = c1.text_input("Nome do Projeto", placeholder="Ex: Hospital Central")
@@ -143,11 +155,30 @@ for i, (fase, itens) in enumerate(METODOLOGIA.items()):
             if checked: concluidos += 1
         perc_fases[fase] = (concluidos / len(itens)) * 100
 
+# --- ESCALA DE PROGRESSÃO ESTILIZADA (MARCOS) ---
+st.markdown("---")
 global_avg = sum(perc_fases.values()) / len(perc_fases)
-st.divider()
+st.write(f"### 🛤️ Evolução Metodológica: {global_avg:.1f}%")
+
+cols_spark = st.columns(len(perc_fases))
+for i, (fase, valor) in enumerate(perc_fases.items()):
+    with cols_spark[i]:
+        # Padrão: Azul Marinho com Borda Amarela se iniciado
+        cor_circulo = "#143264" if valor > 0 else "#eeeeee"
+        estilo_borda = "border: 3px solid #ffb30e;" if valor > 0 else "border: 1px solid #cccccc;"
+        
+        st.markdown(f"""
+            <div style='text-align: center; padding: 10px;'>
+                <div style='display: inline-block; width: 25px; height: 25px; border-radius: 50%; background: {cor_circulo}; {estilo_borda}'></div>
+                <p style='font-size: 11px; font-weight: bold; color: #143264; margin-top: 5px; line-height: 1.1;'>{fase}</p>
+                <p style='font-size: 10px; color: #666;'>{valor:.0f}%</p>
+            </div>
+        """, unsafe_allow_html=True)
+
 st.progress(global_avg / 100)
 
 # --- AÇÕES ---
+st.markdown("---")
 col_graf, col_btn = st.columns([1.5, 1])
 
 with col_graf:
@@ -162,18 +193,17 @@ with col_btn:
     
     if st.button("💾 SALVAR NO HUB DE INTELIGÊNCIA", use_container_width=True):
         if nome_p:
-            try:
-                dados_db = {
-                    "nome_projeto": nome_p, "gerente_projeto": gp_p, "oportunidade": oportunidade,
-                    "horas_contratadas": horas_cont, "tipo": tipo_p, "responsavel_verificacao": resp_verificacao,
-                    "data_inicio": str(d_inicio), "data_termino": str(d_termino), "data_producao": str(d_producao)
-                }
-                for f, v in perc_fases.items(): dados_db[MAPA_COLUNAS[f]] = v
-                session.add(Projeto(**dados_db))
-                session.commit()
-                st.toast("✅ Dados sincronizados!", icon="💾")
-            except Exception as e: st.error(f"Erro: {e}")
-        else: st.warning("Informe o nome do projeto.")
+            dados_db = {
+                "nome_projeto": nome_p, "gerente_projeto": gp_p, "oportunidade": oportunidade,
+                "horas_contratadas": horas_cont, "tipo": tipo_p, "responsavel_verificacao": resp_verificacao,
+                "data_inicio": str(d_inicio), "data_termino": str(d_termino), "data_producao": str(d_producao)
+            }
+            for f, v in perc_fases.items(): dados_db[MAPA_COLUNAS[f]] = v
+            session.add(Projeto(**dados_db))
+            session.commit()
+            st.success("✅ Snapshot gravado com sucesso!")
+        else:
+            st.warning("Preencha o Nome do Projeto.")
 
     if st.button("📄 GERAR RELATÓRIO EXECUTIVO", use_container_width=True, type="primary"):
         pdf = PDFExecutivo()
@@ -183,25 +213,24 @@ with col_btn:
         pdf.set_font("Helvetica", 'B', 8); pdf.set_text_color(20, 50, 100)
         pdf.set_fill_color(245, 245, 245)
         
-        # Linha 1
         pdf.cell(63, 7, f" PROJETO: {nome_p.upper()}", 1, 0, 'L', True)
         pdf.cell(63, 7, f" OPORTUNIDADE: {oportunidade}", 1, 0, 'L', True)
         pdf.cell(64, 7, f" GP: {gp_p}", 1, 1, 'L', True)
         
-        # Linha 2
         pdf.cell(63, 7, f" HORAS: {horas_cont}", 1, 0, 'L')
         pdf.cell(63, 7, f" TIPO: {tipo_p}", 1, 0, 'L')
         pdf.cell(64, 7, f" RESP. VERIFICAÇÃO: {resp_verificacao}", 1, 1, 'L')
         
-        # Linha 3
         pdf.cell(63, 7, f" INÍCIO: {d_inicio}", 1, 0, 'L', True)
         pdf.cell(63, 7, f" TÉRMINO: {d_termino}", 1, 0, 'L', True)
         pdf.cell(64, 7, f" PRODUÇÃO: {d_producao}", 1, 1, 'L', True)
         
         pdf.ln(5)
+        # Sparkline no PDF com destaque Amarelo/Azul
         pdf.desenhar_sparkline_pdf(perc_fases, pdf.get_y())
-        pdf.set_y(pdf.get_y() + 15)
+        pdf.set_y(pdf.get_y() + 20)
         
+        # Radar e Diagnóstico
         pdf.image(img_buf, x=65, w=80); pdf.ln(80)
         
         pdf.set_fill_color(255, 243, 205); pdf.set_font("Helvetica", 'B', 10)

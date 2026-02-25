@@ -225,7 +225,8 @@ with col_btn:
                 pdf.set_font("Helvetica", '', 8); pdf.multi_cell(190, 4, f" Pendencias Criticas: {', '.join(pend[:5])}...")
                 pdf.ln(1)
         
-        st.download_button("📥 BAIXAR RELATORIO PDF", data=bytes(pdf.output()), file_name=f"Executive_Report_{nome_p}.pdf", mime="application/pdf", use_container_width=True)
+        st.download_button("📥 BAIXAR RELATORIO PDF", data=bytes(pdf.output()), file_name=f"Relatorio_{nome_p}.pdf", mime="application/pdf", use_container_width=True)
+
 
 
 

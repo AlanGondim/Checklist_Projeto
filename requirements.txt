@@ -4,3 +4,4 @@ matplotlib
 numpy
 sqlalchemy
 fpdf2
+qrcode

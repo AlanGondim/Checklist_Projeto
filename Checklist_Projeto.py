@@ -79,7 +79,7 @@ class PDFExecutivo(FPDF):
             self.image("Logomarca MV Atualizada.png", x=10, y=8, w=22)
         self.set_font('Helvetica', 'B', 16); self.set_text_color(255, 255, 255)
         self.set_xy(35, 15)
-        self.cell(140, 10, "STATUS REPORT EXECUTIVO - HUB DE INTELIGENCIA", ln=True, align='C')
+        self.cell(140, 10, "METODOLOGIA - CHECKLIST DO PROJETO", ln=True, align='C')
         self.ln(20)
 
     def add_watermark(self):
@@ -108,7 +108,7 @@ class PDFExecutivo(FPDF):
 
 # --- INTERFACE STREAMLIT ---
 st.set_page_config(page_title="Checklist do Projeto", layout="wide")
-st.title("🏛️ Hub de Inteligência | Governança e Metodologia")
+st.title("🏛️ Metodologia | Checklist de Projeto")
 
 # Busca de Projeto no Hub
 with st.sidebar:
@@ -226,6 +226,7 @@ with col_btn:
                 pdf.ln(1)
         
         st.download_button("📥 BAIXAR RELATORIO PDF", data=bytes(pdf.output()), file_name=f"Executive_Report_{nome_p}.pdf", mime="application/pdf", use_container_width=True)
+
 
 
 

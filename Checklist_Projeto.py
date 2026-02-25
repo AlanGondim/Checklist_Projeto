@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, inspect
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from fpdf import FPDF
@@ -12,7 +12,7 @@ import os
 
 # --- DATABASE SETUP ---
 Base = declarative_base()
-DB_NAME = 'sqlite:///hub_inteligencia.db'
+DB_NAME = 'sqlite:///hub_inteligencia_executivo.db'
 engine = create_engine(DB_NAME)
 Session = sessionmaker(bind=engine)
 session = Session()
@@ -30,14 +30,12 @@ class Projeto(Base):
     data_producao = Column(String)
     responsavel_verificacao = Column(String)
     timestamp = Column(DateTime, default=datetime.now)
-    inicializacao = Column(Float)
-    planejamento = Column(Float)
-    workshop_de_processos = Column(Float)
-    construcao = Column(Float)
-    go_live = Column(Float)
-    operacao_assistida = Column(Float)
+    inicializacao = Column(Float); planejamento = Column(Float)
+    workshop_de_processos = Column(Float); construcao = Column(Float)
+    go_live = Column(Float); operacao_assistida = Column(Float)
     finalizacao = Column(Float)
 
+# Garante que as colunas existam
 Base.metadata.create_all(engine)
 
 # --- METODOLOGIA ---
@@ -67,10 +65,10 @@ def gerar_radar_chart(realizado_dict):
     realizado = valores + valores[:1]
     
     fig, ax = plt.subplots(figsize=(5, 5), subplot_kw=dict(polar=True))
-    ax.plot(angulos, [100.0]*(N+1), color='#143264', linewidth=1, linestyle='--', label="Ideal")
+    ax.plot(angulos, [100.0]*(N+1), color='#143264', linewidth=1, linestyle='--')
     ax.plot(angulos, realizado, color='#ffb30e', linewidth=3, label="Realizado")
     ax.fill(angulos, realizado, color='#ffb30e', alpha=0.3)
-    plt.xticks(angulos[:-1], categorias, size=8)
+    plt.xticks(angulos[:-1], categorias, size=7, fontweight='bold')
     return fig
 
 class PDFExecutivo(FPDF):
@@ -81,7 +79,7 @@ class PDFExecutivo(FPDF):
             self.image("Logomarca MV Atualizada.png", x=10, y=8, w=22)
         self.set_font('Helvetica', 'B', 16); self.set_text_color(255, 255, 255)
         self.set_xy(35, 15)
-        self.cell(140, 10, "STATUS REPORT EXECUTIVO - HUB DE INTELIGÊNCIA", ln=True, align='C')
+        self.cell(140, 10, "STATUS REPORT EXECUTIVO - HUB DE INTELIGENCIA", ln=True, align='C')
         self.ln(20)
 
     def add_watermark(self):
@@ -98,11 +96,11 @@ class PDFExecutivo(FPDF):
         for i, (fase, valor) in enumerate(perc_fases.items()):
             x_circ = x_start + (i * passo)
             if valor >= 100:
-                self.set_fill_color(20, 50, 100); self.set_draw_color(20, 50, 100); self.set_line_width(0.1)
+                self.set_fill_color(20, 50, 100); self.set_draw_color(20, 50, 100)
             elif valor > 0:
                 self.set_fill_color(20, 50, 100); self.set_draw_color(255, 179, 14); self.set_line_width(0.8)
             else:
-                self.set_fill_color(230, 230, 230); self.set_draw_color(200, 200, 200); self.set_line_width(0.2)
+                self.set_fill_color(230, 230, 230); self.set_draw_color(200, 200, 200)
                 
             self.ellipse(x_circ - 3, y_pos + 2, 6, 6, 'FD')
             self.set_font("Helvetica", 'B', 6); self.set_text_color(20, 50, 100)
@@ -110,11 +108,18 @@ class PDFExecutivo(FPDF):
 
 # --- INTERFACE STREAMLIT ---
 st.set_page_config(page_title="Executive Hub", layout="wide")
-st.title("🛡️ Metodologia | Gestão de Entregas e Conformidade")
+st.title("🏛️ Hub de Inteligência | Governança e Metodologia")
 
+# Busca de Projeto no Hub
+with st.sidebar:
+    st.header("🔍 Buscar no Hub")
+    projetos_salvos = [p.nome_projeto for p in session.query(Projeto.nome_projeto).distinct().all()]
+    projeto_busca = st.selectbox("Carregar Projeto Existente", [""] + projetos_salvos)
+
+# --- CAMPOS EXECUTIVOS ---
 with st.container():
     c1, c2, c3 = st.columns(3)
-    nome_p = c1.text_input("Nome do Projeto", placeholder="Ex: Hospital Central")
+    nome_p = c1.text_input("Nome do Projeto", value=projeto_busca if projeto_busca else "")
     oportunidade = c2.text_input("Oportunidade (CRM)")
     gp_p = c3.text_input("Gerente de Projeto")
 
@@ -124,12 +129,11 @@ with st.container():
     resp_verificacao = c6.text_input("Responsável pela Verificação")
 
     c7, c8, c9 = st.columns(3)
-    # Formatação de data padrão Brasil dd/mm/aaaa
     d_inicio = c7.date_input("Data de Início", format="DD/MM/YYYY")
     d_termino = c8.date_input("Data de Término", format="DD/MM/YYYY")
     d_producao = c9.date_input("Entrada em Produção", format="DD/MM/YYYY")
 
-st.write("### 📋 Checklist do Projeto")
+st.write("### 📋 Checklist Metodológico")
 tabs = st.tabs(list(METODOLOGIA.keys()))
 perc_fases, detalhes_entrega = {}, {}
 
@@ -144,34 +148,21 @@ for i, (fase, itens) in enumerate(METODOLOGIA.items()):
             if checked: concluidos += 1
         perc_fases[fase] = (concluidos / len(itens)) * 100
 
-# --- ESCALA DE PROGRESSÃO (LOGICA DE CIRCULO COMPLETO VS EM ANDAMENTO) ---
+# --- ESCALA DE PROGRESSÃO ---
 st.markdown("---")
 global_avg = sum(perc_fases.values()) / len(perc_fases)
-st.write(f"### 🛤️ Evolução Metodológica: {global_avg:.1f}%")
+st.write(f"### 🛤️ Evolução da Implantação: {global_avg:.1f}%")
 
 cols_spark = st.columns(len(perc_fases))
 for i, (fase, valor) in enumerate(perc_fases.items()):
     with cols_spark[i]:
-        # Logica: 100% = Azul Marinho liso. < 100% e > 0% = Azul Marinho com Borda Amarela.
         cor_circulo = "#143264" if valor > 0 else "#eeeeee"
-        if valor >= 100:
-            estilo_borda = f"border: 3px solid #143264;"
-        elif valor > 0:
-            estilo_borda = f"border: 3px solid #ffb30e;"
-        else:
-            estilo_borda = "border: 1px solid #cccccc;"
-        
-        st.markdown(f"""
-            <div style='text-align: center; padding: 10px;'>
-                <div style='display: inline-block; width: 25px; height: 25px; border-radius: 50%; background: {cor_circulo}; {estilo_borda}'></div>
-                <p style='font-size: 11px; font-weight: bold; color: #143264; margin-top: 5px;'>{fase}</p>
-                <p style='font-size: 10px; color: #666;'>{valor:.0f}%</p>
-            </div>
-        """, unsafe_allow_html=True)
+        estilo_borda = "border: 3px solid #143264;" if valor >= 100 else ("border: 3px solid #ffb30e;" if valor > 0 else "border: 1px solid #cccccc;")
+        st.markdown(f"""<div style='text-align: center;'><div style='display: inline-block; width: 25px; height: 25px; border-radius: 50%; background: {cor_circulo}; {estilo_borda}'></div><p style='font-size: 11px; font-weight: bold; color: #143264; margin-top: 5px;'>{fase}</p></div>""", unsafe_allow_html=True)
 
 st.progress(global_avg / 100)
 
-# --- AÇÕES ---
+# --- HUB DE AÇÕES ---
 st.markdown("---")
 col_graf, col_btn = st.columns([1.5, 1])
 
@@ -187,53 +178,51 @@ with col_btn:
     
     if st.button("💾 SALVAR NO HUB DE INTELIGÊNCIA", use_container_width=True):
         if nome_p:
-            dados_db = {
-                "nome_projeto": nome_p, "gerente_projeto": gp_p, "oportunidade": oportunidade,
-                "horas_contratadas": horas_cont, "tipo": tipo_p, "responsavel_verificacao": resp_verificacao,
-                "data_inicio": d_inicio.strftime("%d/%m/%Y"), 
-                "data_termino": d_termino.strftime("%d/%m/%Y"), 
-                "data_producao": d_producao.strftime("%d/%m/%Y")
-            }
-            for f, v in perc_fases.items(): dados_db[MAPA_COLUNAS[f]] = v
-            session.add(Projeto(**dados_db))
-            session.commit()
-            st.success("✅ Snapshot gravado com sucesso!")
+            try:
+                novo_projeto = Projeto(
+                    nome_projeto=nome_p, gerente_projeto=gp_p, oportunidade=oportunidade,
+                    horas_contratadas=horas_cont, tipo=tipo_p, responsavel_verificacao=resp_verificacao,
+                    data_inicio=d_inicio.strftime("%d/%m/%Y"), 
+                    data_termino=d_termino.strftime("%d/%m/%Y"), 
+                    data_producao=d_producao.strftime("%d/%m/%Y"),
+                    **{MAPA_COLUNAS[f]: v for f, v in perc_fases.items()}
+                )
+                session.add(novo_projeto)
+                session.commit()
+                st.success(f"✅ Snapshot de '{nome_p}' salvo com sucesso!")
+                st.rerun()
+            except Exception as e:
+                session.rollback()
+                st.error(f"Erro ao salvar: {e}")
         else:
-            st.warning("Preencha o Nome do Projeto.")
+            st.warning("Nome do Projeto é obrigatório.")
 
-    if st.button("📄 GERAR RELATÓRIO EXECUTIVO", use_container_width=True, type="primary"):
+    if st.button("📄 GERAR RELATÓRIO EXECUTIVO (IA)", use_container_width=True, type="primary"):
         pdf = PDFExecutivo()
         pdf.add_page(); pdf.add_watermark()
         
+        # Grid Executiva dd/mm/aaaa
         pdf.set_font("Helvetica", 'B', 8); pdf.set_text_color(20, 50, 100); pdf.set_fill_color(245, 245, 245)
-        
-        # Grid de Informações com datas formatadas dd/mm/aaaa
         pdf.cell(63, 7, f" PROJETO: {nome_p.upper()}", 1, 0, 'L', True)
         pdf.cell(63, 7, f" OPORTUNIDADE: {oportunidade}", 1, 0, 'L', True)
         pdf.cell(64, 7, f" GP: {gp_p}", 1, 1, 'L', True)
+        pdf.cell(63, 7, f" INICIO: {d_inicio.strftime('%d/%m/%Y')}", 1, 0, 'L')
+        pdf.cell(63, 7, f" TERMINO: {d_termino.strftime('%d/%m/%Y')}", 1, 0, 'L')
+        pdf.cell(64, 7, f" PRODUCAO: {d_producao.strftime('%d/%m/%Y')}", 1, 1, 'L')
         
-        pdf.cell(63, 7, f" HORAS: {horas_cont}", 1, 0, 'L')
-        pdf.cell(63, 7, f" TIPO: {tipo_p}", 1, 0, 'L')
-        pdf.cell(64, 7, f" RESP. VERIFICACAO: {resp_verificacao}", 1, 1, 'L')
-        
-        pdf.cell(63, 7, f" INICIO: {d_inicio.strftime('%d/%m/%Y')}", 1, 0, 'L', True)
-        pdf.cell(63, 7, f" TERMINO: {d_termino.strftime('%d/%m/%Y')}", 1, 0, 'L', True)
-        pdf.cell(64, 7, f" PRODUCAO: {d_producao.strftime('%d/%m/%Y')}", 1, 1, 'L', True)
-        
-        pdf.ln(5)
-        pdf.desenhar_sparkline_pdf(perc_fases, pdf.get_y())
-        pdf.set_y(pdf.get_y() + 20)
-        
+        pdf.ln(5); pdf.desenhar_sparkline_pdf(perc_fases, pdf.get_y()); pdf.set_y(pdf.get_y() + 20)
         pdf.image(img_buf, x=65, w=80); pdf.ln(80)
         
+        # Detalhamento IA
         pdf.set_fill_color(255, 243, 205); pdf.set_font("Helvetica", 'B', 10)
-        pdf.cell(190, 8, "DIAGNOSTICO IA: PENDENCIAS E PROXIMOS PASSOS", 0, 1, 'L', True); pdf.ln(2)
+        pdf.cell(190, 8, " INTELIGENCIA DE ENTREGA: DIAGNOSTICO DE PENDENCIAS", 0, 1, 'L', True)
         pdf.set_font("Helvetica", '', 8); pdf.set_text_color(50, 50, 50)
         
         for fase, itens in detalhes_entrega.items():
             pend = [i["doc"] for i in itens if i["status"] == "Pendente"]
             if pend:
-                pdf.multi_cell(190, 5, f"> {fase}: {', '.join(pend[:4])}...", border='B')
+                pdf.set_font("Helvetica", 'B', 8); pdf.cell(190, 5, f"> Fase {fase}:", ln=True)
+                pdf.set_font("Helvetica", '', 8); pdf.multi_cell(190, 4, f" Pendencias Criticas: {', '.join(pend[:5])}...")
+                pdf.ln(1)
         
-        pdf_bytes = pdf.output()
-        st.download_button("📥 BAIXAR PDF", data=bytes(pdf_bytes), file_name=f"Status_{nome_p}.pdf", mime="application/pdf", use_container_width=True)
+        st.download_button("📥 BAIXAR RELATORIO PDF", data=bytes(pdf.output()), file_name=f"Executive_Report_{nome_p}.pdf", mime="application/pdf", use_container_width=True)

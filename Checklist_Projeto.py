@@ -107,7 +107,7 @@ class PDFExecutivo(FPDF):
             self.text(x_circ - 8, y_pos + 12, fase[:15])
 
 # --- INTERFACE STREAMLIT ---
-st.set_page_config(page_title="Executive Hub", layout="wide")
+st.set_page_config(page_title="Checklist do Projeto", layout="wide")
 st.title("🏛️ Hub de Inteligência | Governança e Metodologia")
 
 # Busca de Projeto no Hub
@@ -226,6 +226,7 @@ with col_btn:
                 pdf.ln(1)
         
         st.download_button("📥 BAIXAR RELATORIO PDF", data=bytes(pdf.output()), file_name=f"Executive_Report_{nome_p}.pdf", mime="application/pdf", use_container_width=True)
+
 
 
 

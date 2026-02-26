@@ -134,7 +134,7 @@ with st.container():
     d_termino = c8.date_input("Data de Término", format="DD/MM/YYYY")
     d_producao = c9.date_input("Entrada em Produção", format="DD/MM/YYYY")
 
-st.write("### 📋 Checklist Metodológico")
+st.write("### 📋 Checklist do Projeto")
 tabs = st.tabs(list(METODOLOGIA.keys()))
 perc_fases, detalhes_entrega = {}, {}
 
@@ -227,6 +227,7 @@ with col_btn:
                 pdf.ln(1)
         
         st.download_button("📥 BAIXAR RELATORIO PDF", data=bytes(pdf.output()), file_name=f"Executive_Report_{nome_p}.pdf", mime="application/pdf", use_container_width=True)
+
 
 
 

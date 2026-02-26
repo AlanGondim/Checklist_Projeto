@@ -126,7 +126,7 @@ with st.container():
 
     c4, c5, c6 = st.columns(3)
     horas_cont = c4.number_input("Horas Contratadas", min_value=0.0, step=10.0 )
-    tipo_p = c5.selectbox("Tipo", ["Implantação", "Revitalização", "Upgrade", "Consultoria"])
+    tipo_p = c5.selectbox("Tipo", ["Implantação", "Migração", "Revitalização", "Consultoria"])
     resp_verificacao = c6.text_input("Responsável pela Verificação")
 
     c7, c8, c9 = st.columns(3)
@@ -227,6 +227,7 @@ with col_btn:
                 pdf.ln(1)
         
         st.download_button("📥 BAIXAR RELATORIO PDF", data=bytes(pdf.output()), file_name=f"Executive_Report_{nome_p}.pdf", mime="application/pdf", use_container_width=True)
+
 
 
 

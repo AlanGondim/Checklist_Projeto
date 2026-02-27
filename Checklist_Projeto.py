@@ -138,7 +138,6 @@ with st.container():
 
 # CHECKLIST COM A MESMA FONTE REDUZIDA
 st.markdown("<h3 style='font-size: 20px; color: #143264; font-weight: bold;'>📋 Checklist do Projeto</h3>", unsafe_allow_html=True)
-st.write("### 📋 Checklist do Projeto")
 tabs = st.tabs(list(METODOLOGIA.keys()))
 perc_fases, detalhes_entrega = {}, {}
 
@@ -231,6 +230,7 @@ with col_btn:
                 pdf.ln(1)
         
         st.download_button("📥 BAIXAR RELATORIO PDF", data=bytes(pdf.output()), file_name=f"Executive_Report_{nome_p}.pdf", mime="application/pdf", use_container_width=True)
+
 
 
 

@@ -155,7 +155,7 @@ for i, (fase, itens) in enumerate(METODOLOGIA.items()):
 # --- ESCALA DE PROGRESSÃO ---
 st.markdown("---")
 global_avg = sum(perc_fases.values()) / len(perc_fases)
-st.write(f"### 🛤️ Evolução da Implantação: {global_avg:.1f}%")
+st.markdown(f"<h3 style='font-size: 20px; color: #143264; font-weight: bold;'>🛤️ Evolução da Implantação: {global_avg:.1f}%</h3>", unsafe_allow_html=True)
 
 cols_spark = st.columns(len(perc_fases))
 for i, (fase, valor) in enumerate(perc_fases.items()):
@@ -230,6 +230,7 @@ with col_btn:
                 pdf.ln(1)
         
         st.download_button("📥 BAIXAR RELATORIO PDF", data=bytes(pdf.output()), file_name=f"Executive_Report_{nome_p}.pdf", mime="application/pdf", use_container_width=True)
+
 
 
 

@@ -109,7 +109,9 @@ class PDFExecutivo(FPDF):
 
 # --- INTERFACE STREAMLIT ---
 st.set_page_config(page_title="Executive Hub", layout="wide")
-st.title("🏛️ Hub de Inteligência | Governança e Metodologia")
+
+# TITULO COM FONTE REDUZIDA
+st.markdown("<h2 style='font-size: 24px; color: #143264; font-weight: bold;'>🏛️ Hub de Inteligência | Governança e Metodologia</h2>", unsafe_allow_html=True)
 
 # Busca de Projeto no Hub
 with st.sidebar:
@@ -227,6 +229,7 @@ with col_btn:
                 pdf.ln(1)
         
         st.download_button("📥 BAIXAR RELATORIO PDF", data=bytes(pdf.output()), file_name=f"Executive_Report_{nome_p}.pdf", mime="application/pdf", use_container_width=True)
+
 
 
 

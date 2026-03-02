@@ -2,8 +2,5 @@ pandas
 streamlit
 matplotlib
 numpy
-SQLAlchemy
+sqlalchemy
 fpdf
-qrcode
-pillow
-psycopg2-binary

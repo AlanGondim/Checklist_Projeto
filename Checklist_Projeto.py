@@ -1,4 +1,3 @@
-
 import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
@@ -230,6 +229,7 @@ with col_btn:
                 pdf.ln(1)
         
         st.download_button("📥 BAIXAR RELATORIO PDF", data=bytes(pdf.output()), file_name=f"Executive_Report_{nome_p}.pdf", mime="application/pdf", use_container_width=True)
+
 
 
 

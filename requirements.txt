@@ -6,3 +6,4 @@ SQLAlchemy
 fpdf
 qrcode
 pillow
+psycopg2-binary

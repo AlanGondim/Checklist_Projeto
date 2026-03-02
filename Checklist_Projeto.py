@@ -84,6 +84,35 @@ if modo == "Checklist Operacional":
                 perc_fases[fase] = (concluidos / len(itens)) * 100
                 st.info(f"Progresso de {fase}: {perc_fases[fase]:.1f}%")
 
+# --- NOVO BLOCO: SPARKLINE VISUAL DAS FASES ---
+    st.markdown("---")
+    st.markdown("<h3 style='font-size: 18px; color: #143264;'>🛤️ Linha do Tempo da Metodologia</h3>", unsafe_allow_html=True)
+    
+    cols_spark = st.columns(len(fases_lista))
+    for i, fase in enumerate(fases_lista):
+        with cols_spark[i]:
+            valor = perc_fases.get(fase, 0)
+            # Regra: Azul marinho se concluído, Cinza com borda amarela se pendente
+            if valor >= 100:
+                bg_color = "#143264"
+                border_style = "none"
+                text_color = "#143264"
+            else:
+                bg_color = "#E0E0E0"
+                border_style = "2px solid #FFD700" # Amarelo destacado
+                text_color = "#757575"
+            
+            st.markdown(f"""
+                <div style='text-align: center;'>
+                    <div style='display: inline-block; width: 30px; height: 30px; border-radius: 50%; 
+                         background-color: {bg_color}; border: {border_style}; box-shadow: 1px 1px 3px rgba(0,0,0,0.1);'>
+                    </div>
+                    <p style='font-size: 11px; font-weight: bold; color: {text_color}; margin-top: 5px;'>{fase}</p>
+                    <p style='font-size: 12px; font-weight: bold; color: #FFD700;'>{valor:.0f}%</p>
+                </div>
+            """, unsafe_allow_html=True)
+    st.markdown("---")
+    
     if st.button("💾 SALVAR NO HUB"):
         if nome_p:
             novo = Projeto(nome_projeto=nome_p, gerente_projeto=gp_p, regional=reg_p,
@@ -93,7 +122,7 @@ if modo == "Checklist Operacional":
         else:
             st.warning("O Nome do Projeto é obrigatório.")
 
-elif modo == "Dashboard Regional (Executivo)":
+elif modo == "Dashboard Regional":
     st.markdown("<h2 style='font-size: 24px; color: #143264; font-weight: bold;'>📊 Dashboard de Governança Regional</h2>", unsafe_allow_html=True)
     
     query = session.query(Projeto).order_by(desc(Projeto.timestamp)).all()
@@ -155,5 +184,6 @@ elif modo == "Dashboard Regional (Executivo)":
             st.warning("Sem dados para os filtros selecionados.")
     else:
         st.info("Nenhum projeto registrado.")
+
 
 

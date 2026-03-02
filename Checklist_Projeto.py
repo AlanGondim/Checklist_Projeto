@@ -74,12 +74,12 @@ if modo == "Checklist Operacional":
         reg_p = c6.selectbox("Regional", ["Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
 
         c7, c8, c9 = st.columns(3)
-        d_inicio = c7.date_input("Data de Início")
-        d_termino = c8.date_input("Data de Término")
-        d_producao = c9.date_input("Data de Entrada em Produção")
+        d_inicio = c7.date_input("Data de Início", format = "DD/MM/YYYY")
+        d_termino = c8.date_input("Data de Término", format = "DD/MM/YYYY")
+        d_producao = c9.date_input("Data de Entrada em Produção", format = "DD/MM/YYYY")
 
         c10, c11 = st.columns(2)
-        d_auditoria = c10.date_input("Data da Auditoria")
+        d_auditoria = c10.date_input("Data da Auditoria", format = "DD/MM/YYYY")
         resp_auditoria = c11.text_input("Responsável pela Auditoria")
 
     # --- LÓGICA DE CÁLCULO DE PROGRESSO ---
@@ -214,3 +214,4 @@ elif modo == "Dashboard Regional":
         st.pyplot(fig)
     else:
         st.info("Nenhum projeto registrado.")
+

@@ -119,17 +119,23 @@ with st.sidebar:
     projetos_salvos = [p.nome_projeto for p in session.query(Projeto.nome_projeto).distinct().all()]
     projeto_busca = st.selectbox("Carregar Projeto Existente", [""] + projetos_salvos)
 
-# --- CAMPOS EXECUTIVOS ---
+# --- LOGICA DE CARREGAMENTO REAL ---
+dados_projeto = None
+if projeto_busca:
+    dados_projeto = session.query(Projeto).filter_by(nome_projeto=projeto_busca).order_by(Projeto.timestamp.desc()).first()
+
+# --- CAMPOS EXECUTIVOS COM VALORES RECUPERADOS ---
 with st.container():
     c1, c2, c3 = st.columns(3)
-    nome_p = c1.text_input("Nome do Projeto", value=projeto_busca if projeto_busca else "")
-    oportunidade = c2.text_input("Oportunidade (CRM)")
-    gp_p = c3.text_input("Gerente de Projeto")
+    nome_p = c1.text_input("Nome do Projeto", value=dados_projeto.nome_projeto if dados_projeto else "")
+    oportunidade = c2.text_input("Oportunidade (CRM)", value=dados_projeto.oportunidade if dados_projeto else "")
+    gp_p = c3.text_input("Gerente de Projeto", value=dados_projeto.gerente_projeto if dados_projeto else "")
 
     c4, c5, c6 = st.columns(3)
-    horas_cont = c4.number_input("Horas Contratadas", min_value=0.0, step=100.0 )
-    tipo_p = c5.selectbox("Tipo", ["Implantação", "Migração", "Revitalização", "Consultoria"])
-    resp_verificacao = c6.text_input("Responsável pela Verificação")
+    horas_cont = c4.number_input("Horas Contratadas", min_value=0.0, step=10.0, value=dados_projeto.horas_contratadas if dados_projeto else 0.0)
+    # Para o selectbox de tipo, precisaria de uma lógica para achar o index, mas deixemos o padrão por agora
+    tipo_p = c5.selectbox("Tipo", ["Implantação", "Migração", "Revitalização", "Consultoria"]) 
+    resp_verificacao = c6.text_input("Responsável pela Verificação", value=dados_projeto.responsavel_verificacao if dados_projeto else "")
 
     c7, c8, c9 = st.columns(3)
     d_inicio = c7.date_input("Data de Início", format="DD/MM/YYYY")
@@ -230,6 +236,7 @@ with col_btn:
                 pdf.ln(1)
         
         st.download_button("📥 BAIXAR RELATORIO PDF", data=bytes(pdf.output()), file_name=f"Executive_Report_{nome_p}.pdf", mime="application/pdf", use_container_width=True)
+
 
 
 

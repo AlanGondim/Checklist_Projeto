@@ -51,7 +51,7 @@ MAPA_COLUNAS = {
 }
 
 # --- INTERFACE ---
-st.set_page_config(page_title="Executive Hub MV", layout="wide")
+st.set_page_config(page_title="Checklist de Projeto MV", layout="wide")
 modo = st.sidebar.radio("Navegação", ["Checklist Operacional", "Dashboard Regional (Executivo)"])
 
 if modo == "Checklist Operacional":
@@ -155,4 +155,5 @@ elif modo == "Dashboard Regional (Executivo)":
             st.warning("Sem dados para os filtros selecionados.")
     else:
         st.info("Nenhum projeto registrado.")
+
 

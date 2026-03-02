@@ -85,7 +85,7 @@ c1, c2 = st.columns(2)
 nome_proj = c1.text_input("Nome do Projeto", placeholder="Ex: Hospital X")
 gp_proj = c2.text_input("Gerente de Projeto")
 
-st.write("### 📋 Checklist Metodológico")
+st.write("### 📋 Checklist do Projeto")
 tabs = st.tabs(list(METODOLOGIA.keys()))
 perc_fases, detalhes_entrega = {}, {}
 
@@ -181,3 +181,4 @@ with col_btn:
             
             st.download_button("📥 BAIXAR RELATÓRIO PDF", data=pdf_data, file_name=f"Status_{nome_proj}.pdf", mime="application/pdf", use_container_width=True)
         else: st.warning("Informe o nome do projeto.")
+

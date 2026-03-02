@@ -100,52 +100,59 @@ elif modo == "Dashboard Regional (Executivo)":
     if query:
         df = pd.DataFrame([vars(p) for p in query]).drop_duplicates(subset=['nome_projeto'], keep='first')
         
-        # Correção do erro de ordenação (Trata Nulos)
-        df['regional'] = df['regional'].fillna("Não Definido")
-        df['gerente_projeto'] = df['gerente_projeto'].fillna("Sem Gerente")
+        # Tratamento de Nulos para evitar erro de ordenação
+        df['regional'] = df['regional'].fillna("N/D")
+        df['gerente_projeto'] = df['gerente_projeto'].fillna("N/D")
 
-        # Nomes amigáveis para as colunas das fases
+        # Nomes amigáveis
         df_display = df.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
         colunas_fases = list(METODOLOGIA.keys())
         df_display['Progresso Global %'] = df_display[colunas_fases].mean(axis=1).round(1)
 
-        # --- FILTROS INTERATIVOS ---
+        # --- FILTROS ---
         st.sidebar.header("🎯 Filtros")
-        
-        regionais = sorted(df_display['regional'].unique())
-        f_reg = st.sidebar.multiselect("Regionais", regionais, default=regionais)
-        
-        gerentes = sorted(df_display['gerente_projeto'].unique())
-        f_gp = st.sidebar.multiselect("Gerentes de Projeto", gerentes, default=gerentes)
+        f_reg = st.sidebar.multiselect("Regionais", sorted(df_display['regional'].unique()), default=df_display['regional'].unique())
+        f_gp = st.sidebar.multiselect("Gerentes", sorted(df_display['gerente_projeto'].unique()), default=df_display['gerente_projeto'].unique())
 
-        # Filtro de dados
         df_filt = df_display[(df_display['regional'].isin(f_reg)) & (df_display['gerente_projeto'].isin(f_gp))]
 
         if not df_filt.empty:
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Projetos Ativos", len(df_filt))
-            m2.metric("Média Global", f"{df_filt['Progresso Global %'].mean():.1f}%")
-            m3.metric("Fase com Menor Evolução", df_filt[colunas_fases].mean().idxmin())
-
-            # --- TABELA INTERATIVA ---
-            st.markdown("### 🔍 Ranking de Performance")
-            
-            # Formatação da Tabela
+            # Ranking Detalhado
+            st.markdown("### 🔍 Ranking de Entrega Detalhado")
             st.dataframe(
                 df_filt[['regional', 'gerente_projeto', 'nome_projeto', 'Progresso Global %'] + colunas_fases],
-                use_container_width=True,
-                hide_index=True,
+                use_container_width=True, hide_index=True,
                 column_config={
                     "Progresso Global %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%"),
                     **{fase: st.column_config.NumberColumn(format="%.0f%%") for fase in colunas_fases}
                 }
             )
 
+            # --- GRÁFICO DE BARRAS HORIZONTAIS ---
             st.markdown("---")
-            st.markdown("### 📈 Comparativo Global")
-            st.bar_chart(df_filt.set_index('nome_projeto')['Progresso Global %'])
+            st.markdown("### 📈 Comparativo Global de Performance")
+            
+            # Ordenando para o gráfico ficar mais intuitivo (melhores no topo)
+            df_chart = df_filt.sort_values(by='Progresso Global %', ascending=True)
+            
+            # Usando st.bar_chart configurado para horizontal através de Matplotlib para maior controle
+            fig_bar, ax_bar = plt.subplots(figsize=(10, len(df_chart) * 0.6 + 2))
+            barras = ax_bar.barh(df_chart['nome_projeto'], df_chart['Progresso Global %'], color='#143264')
+            
+            ax_bar.set_xlabel('Progresso Global %', fontweight='bold', color='#143264')
+            ax_bar.set_xlim(0, 105)
+            ax_bar.spines['top'].set_visible(False)
+            ax_bar.spines['right'].set_visible(False)
+            
+            # Adiciona rótulos de dados
+            for bar in barras:
+                width = bar.get_width()
+                ax_bar.text(width + 1, bar.get_y() + bar.get_height()/2, f'{width}%', va='center', fontsize=9, fontweight='bold')
+
+            st.pyplot(fig_bar)
 
         else:
-            st.warning("Nenhum dado encontrado para os filtros aplicados.")
+            st.warning("Sem dados para os filtros selecionados.")
     else:
-        st.info("Nenhum projeto cadastrado no sistema.")
+        st.info("Nenhum projeto registrado.")
+

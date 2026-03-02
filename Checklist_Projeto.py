@@ -52,7 +52,7 @@ MAPA_COLUNAS = {
 
 # --- INTERFACE ---
 st.set_page_config(page_title="Checklist de Projeto MV", layout="wide")
-modo = st.sidebar.radio("Navegação", ["Checklist Operacional", "Dashboard Regional (Executivo)"])
+modo = st.sidebar.radio("Navegação", ["Checklist Operacional", "Dashboard Regional"])
 
 if modo == "Checklist Operacional":
     st.markdown("<h2 style='font-size: 24px; color: #143264; font-weight: bold;'>🏛️ Hub de Inteligência | Operação</h2>", unsafe_allow_html=True)
@@ -60,8 +60,28 @@ if modo == "Checklist Operacional":
     with st.container():
         c1, c2, c3 = st.columns(3)
         nome_p = c1.text_input("Nome do Projeto")
-        gp_p = c2.text_input("Gerente de Projeto")
-        reg_p = c3.selectbox("Regional", ["Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
+        oportunidade = c2.text_input("Oportunidade (CRM)")
+        gp_p = c3.text_input("Gerente de Projeto")
+
+        c4, c5, c6 = st.columns(3)
+        horas_cont = c4.number_input("Horas Contratadas", min_value=0.0)
+        tipo_p = c5.selectbox("Tipo do Projeto", ["Migração", "Implantação", "Consultoria", "Revitalização"])
+        reg_p = c6.selectbox("Regional", ["Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
+
+        c7, c8, c9 = st.columns(3)
+        d_inicio = c7.date_input("Data de Início")
+        d_termino = c8.date_input("Data de Término")
+        d_producao = c9.date_input("Data de Entrada em Produção")
+
+        c10, c11 = st.columns(2)
+        d_auditoria = c10.date_input("Data da Auditoria")
+        resp_auditoria = c11.text_input("Responsável pela Auditoria")
+
+    fases_lista = list(METODOLOGIA.keys())
+    perc_fases = {}
+
+    st.markdown("---")
+    st.markdown("<h3 style='font-size: 18px; color: #143264;'>🛤️ Linha do Tempo da Metodologia</h3>", unsafe_allow_html=True)
 
     # --- PROCESSAMENTO DE PERCENTUAIS (CÁLCULO PRÉVIO PARA O SPARKLINE) ---
     fases_lista = list(METODOLOGIA.keys())
@@ -202,6 +222,7 @@ elif modo == "Dashboard Regional":
             st.warning("Sem dados para os filtros selecionados.")
     else:
         st.info("Nenhum projeto registrado.")
+
 
 
 

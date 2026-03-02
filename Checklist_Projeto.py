@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, desc
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, desc, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
@@ -25,6 +25,11 @@ class Projeto(Base):
     oportunidade = Column(String)
     horas_contratadas = Column(Float)
     tipo = Column(String)
+    data_inicio = Column(String)
+    data_termino = Column(String)
+    data_entrada_producao = Column(String)
+    data_auditoria = Column(String)
+    responsavel_auditoria = Column(String)
     timestamp = Column(DateTime, default=datetime.now)
     inicializacao = Column(Float); planejamento = Column(Float)
     workshop_de_processos = Column(Float); construcao = Column(Float)
@@ -51,7 +56,7 @@ MAPA_COLUNAS = {
 }
 
 # --- INTERFACE ---
-st.set_page_config(page_title="Checklist de Projeto MV", layout="wide")
+st.set_page_config(page_title="Hub de Inteligência MV", layout="wide")
 modo = st.sidebar.radio("Navegação", ["Checklist Operacional", "Dashboard Regional"])
 
 if modo == "Checklist Operacional":
@@ -77,14 +82,33 @@ if modo == "Checklist Operacional":
         d_auditoria = c10.date_input("Data da Auditoria")
         resp_auditoria = c11.text_input("Responsável pela Auditoria")
 
+    # --- LÓGICA DE CÁLCULO DE PROGRESSO ---
     fases_lista = list(METODOLOGIA.keys())
     perc_fases = {}
-
+    
+    # Processamos os checkboxes ANTES para o Sparkline usar os dados atuais
+    tabs_placeholder = st.empty()
+    
     st.markdown("---")
-    # SPARKLINE (Lógica de preenchimento CSS mantida para feedback visual)
+    # --- SPARKLINE COM REGRAS DEFINIDAS ---
+    st.markdown("<h3 style='font-size: 18px; color: #143264;'>🛤️ Linha do Tempo da Metodologia</h3>", unsafe_allow_html=True)
+    
+    st.markdown("""
+        <style>
+        .timeline-line { position: absolute; top: 38px; left: 5%; right: 5%; height: 3px; background-color: #143264; z-index: 1; }
+        .pie-circle { 
+            width: 45px; height: 45px; border-radius: 50%; display: inline-block;
+            transition: all 0.3s ease; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+            position: relative; z-index: 2; background-color: white;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # Renderização das Tabs
     tabs = st.tabs(fases_lista)
     for i, fase in enumerate(fases_lista):
         with tabs[i]:
+            # Trava de Fase
             if i > 0 and perc_fases.get(fases_lista[i-1], 0) < 100:
                 st.error(f"🚨 FASE BLOQUEADA: Conclua 100% da fase anterior para liberar '{fase}'.")
                 perc_fases[fase] = 0.0
@@ -93,22 +117,51 @@ if modo == "Checklist Operacional":
                 itens = METODOLOGIA[fase]
                 cols_check = st.columns(2)
                 for idx, item in enumerate(itens):
+                    # Uso de session_state para garantir que o sparkline acima veja a mudança
                     if cols_check[idx % 2].checkbox(item, key=f"c_{fase}_{item}"):
                         concluidos += 1
                 perc_fases[fase] = (concluidos / len(itens)) * 100
 
+    # Renderização do Sparkline (abaixo dos inputs, acima das tabs)
+    st.markdown("<div style='position: relative; margin-bottom: 40px;'>", unsafe_allow_html=True)
+    st.markdown("<div class='timeline-line'></div>", unsafe_allow_html=True)
+    cols_visual = st.columns(len(fases_lista))
+    
+    for i, fase in enumerate(fases_lista):
+        valor = perc_fases[fase]
+        # Borda amarela se pendente (<100)
+        border_color = "#FFD700" if valor < 100 else "#143264"
+        
+        with cols_visual[i]:
+            st.markdown(f"""
+                <div style='text-align: center;'>
+                    <div class='pie-circle' style='
+                        background: conic-gradient(#143264 {valor}%, #E0E0E0 0);
+                        border: 3px solid {border_color};'>
+                    </div>
+                    <p style='font-size: 11px; font-weight: bold; color: #143264; margin-top: 8px;'>{fase}</p>
+                    <p style='font-size: 14px; font-weight: bold; color: #143264;'>{valor:.0f}%</p>
+                </div>
+            """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
     if st.button("💾 SALVAR NO HUB", use_container_width=True):
         if nome_p and gp_p:
-            novo = Projeto(
-                nome_projeto=nome_p, gerente_projeto=gp_p, regional=reg_p, oportunidade=oportunidade,
-                horas_contratadas=horas_cont, tipo=tipo_p, data_inicio=str(d_inicio),
-                data_termino=str(d_termino), data_entrada_producao=str(d_producao),
-                data_auditoria=str(d_auditoria), responsavel_auditoria=resp_auditoria,
-                **{MAPA_COLUNAS[f]: v for f, v in perc_fases.items()}
-            )
-            session.add(novo); session.commit()
-            st.success("Dados salvos com sucesso!")
-            st.rerun()
+            try:
+                novo = Projeto(
+                    nome_projeto=nome_p, gerente_projeto=gp_p, regional=reg_p, oportunidade=oportunidade,
+                    horas_contratadas=horas_cont, tipo=tipo_p, data_inicio=str(d_inicio),
+                    data_termino=str(d_termino), data_entrada_producao=str(d_producao),
+                    data_auditoria=str(d_auditoria), responsavel_auditoria=resp_auditoria,
+                    **{MAPA_COLUNAS[f]: v for f, v in perc_fases.items()}
+                )
+                session.add(novo); session.commit()
+                st.success("Snapshot salvo com sucesso!")
+                st.balloons()
+            except Exception as e:
+                st.error(f"Erro ao salvar: {e}")
+        else:
+            st.warning("Preencha o Nome do Projeto e do Gerente.")
 
 elif modo == "Dashboard Regional":
     st.markdown("<h2 style='font-size: 24px; color: #143264; font-weight: bold;'>📊 Dashboard de Governança Regional</h2>", unsafe_allow_html=True)
@@ -118,38 +171,46 @@ elif modo == "Dashboard Regional":
         df = pd.DataFrame([vars(p) for p in query]).drop_duplicates(subset=['nome_projeto'], keep='first')
         df['regional'] = df['regional'].fillna("N/D")
         df['gerente_projeto'] = df['gerente_projeto'].fillna("Sem Nome")
-
-        colunas_fases = list(MAPA_COLUNAS.values())
-        df['Progresso %'] = df[colunas_fases].mean(axis=1).round(1)
-
-        # --- RANKING POR GERENTE DE PROJETO ---
-        st.markdown("### 🏆 Performance Média por Gerente de Projeto")
         
-        # Agrupamento: Média de progresso de todos os projetos do gerente
-        df_gerente = df.groupby('gerente_projeto').agg({
-            'Progresso %': 'mean',
-            'nome_projeto': 'count',
-            'regional': 'first'
-        }).reset_index()
-        df_gerente.columns = ['Gerente', 'Média de Entrega %', 'Qtd Projetos', 'Regional']
-        df_gerente = df_gerente.sort_values(by='Média de Entrega %', ascending=False)
+        col_fases_db = list(MAPA_COLUNAS.values())
+        df['Progresso %'] = df[col_fases_db].mean(axis=1).round(1)
 
-        st.dataframe(df_gerente, use_container_width=True, hide_index=True, 
+        # --- FILTROS SIDEBAR ---
+        st.sidebar.header("🎯 Filtros")
+        gerentes_list = sorted(df['gerente_projeto'].unique())
+        f_gp = st.sidebar.multiselect("Filtrar por Gerente", gerentes_list, default=gerentes_list)
+        
+        regionais_list = sorted(df['regional'].unique())
+        f_reg = st.sidebar.multiselect("Filtrar por Regional", regionais_list, default=regionais_list)
+
+        df_filt = df[(df['gerente_projeto'].isin(f_gp)) & (df['regional'].isin(f_reg))]
+
+        # --- RANKING POR GERENTE (TABELA) ---
+        st.markdown("### 🏆 Performance Média por Gerente")
+        df_gerente = df_filt.groupby('gerente_projeto').agg({'Progresso %': 'mean', 'nome_projeto': 'count'}).reset_index()
+        df_gerente.columns = ['Gerente', 'Média de Entrega %', 'Qtd Projetos']
+        st.dataframe(df_gerente.sort_values('Média de Entrega %', ascending=False), use_container_width=True, hide_index=True,
                      column_config={"Média de Entrega %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%")})
 
-        # Detalhamento Individual (Tabela completa abaixo do gráfico)
-        with st.expander("🔍 Visualizar Detalhes por Projeto Individual"):
-            st.dataframe(df[['gerente_projeto', 'nome_projeto', 'regional', 'Progresso %']].sort_values(by='Progresso %', ascending=False))
+        # --- GRÁFICO RANKING POR PROJETO (BARRAS HORIZONTAIS) ---
+        st.markdown("---")
+        st.markdown("### 📈 Ranking de Progresso por Projeto")
+        
+        # Ordenação do mais evoluído para o menos (Y-axis barh inverte a ordem, então usamos ascending=True para o maior ficar no topo)
+        df_rank = df_filt.sort_values(by='Progresso %', ascending=True)
+        
+        fig, ax = plt.subplots(figsize=(10, len(df_rank) * 0.5 + 2))
+        bars = ax.barh(df_rank['nome_projeto'], df_rank['Progresso %'], color='#143264')
+        
+        ax.set_xlabel('Progresso Global %', fontweight='bold', color='#143264')
+        ax.set_xlim(0, 105)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        
+        for bar in bars:
+            width = bar.get_width()
+            ax.text(width + 1, bar.get_y() + bar.get_height()/2, f'{width:.1f}%', va='center', fontsize=9, fontweight='bold', color='#143264')
 
+        st.pyplot(fig)
     else:
-        st.info("Nenhum projeto registrado no Hub de Inteligência.")
-
-
-
-
-
-
-
-
-
-
+        st.info("Nenhum projeto registrado.")

@@ -1,18 +1,19 @@
-import streamlit as st
 import pandas as pd
+import streamlit as st
 import matplotlib.pyplot as plt
 import numpy as np
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, inspect
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from fpdf import FPDF
 from datetime import datetime
 import io
-import base64
+import os
 
-# --- CONFIGURAÇÃO DO BANCO DE DADOS ---
+# --- DATABASE SETUP ---
 Base = declarative_base()
-engine = create_engine('sqlite:///hub_inteligencia.db')
+DB_NAME = 'sqlite:///hub_inteligencia_executivo.db'
+engine = create_engine(DB_NAME)
 Session = sessionmaker(bind=engine)
 session = Session()
 
@@ -21,26 +22,31 @@ class Projeto(Base):
     id = Column(Integer, primary_key=True)
     nome_projeto = Column(String)
     gerente_projeto = Column(String)
+    oportunidade = Column(String)
+    horas_contratadas = Column(Float)
+    tipo = Column(String)
+    data_inicio = Column(String)
+    data_termino = Column(String)
+    data_producao = Column(String)
+    responsavel_verificacao = Column(String)
     timestamp = Column(DateTime, default=datetime.now)
-    inicializacao = Column(Float)
-    planejamento = Column(Float)
-    workshop_de_processos = Column(Float)
-    construcao = Column(Float)
-    go_live = Column(Float)
-    operacao_assistida = Column(Float)
+    inicializacao = Column(Float); planejamento = Column(Float)
+    workshop_de_processos = Column(Float); construcao = Column(Float)
+    go_live = Column(Float); operacao_assistida = Column(Float)
     finalizacao = Column(Float)
 
+# Garante que as colunas existam
 Base.metadata.create_all(engine)
 
-# --- METODOLOGIA BASEADA NO FR.IC.48 ---
+# --- METODOLOGIA ---
 METODOLOGIA = {
-    "Inicialização": ["Proposta Técnica", "Contrato", "Orçamento Inicial", "Alinhamento MV", "Alinhamento Cliente", "TAP", "DEP"],
-    "Planejamento": ["Kick Off", "Ata de Alinhamento", "Cronograma", "Plano de Projeto", "Checklist FR.IC.48"],
-    "Workshop de Processos": ["Gaps Críticos", "Business Blue Print", "Configuração", "Apresentação da Solução"],
-    "Construção": ["Plano de Cutover", "Avaliação do Treinamento", "Progressão das Tabelas", "Carga Precursora"],
-    "Go Live": ["Carga de Dados Finais", "Escala de Apoio", "Metas de Simulação", "Testes Integrados", "Reunião Go/No Go"],
-    "Operação Assistida": ["Suporte In Loco", "Pré-Onboarding", "Identificação de Gaps"],
-    "Finalização": ["Termo de Encerramento", "Lições Aprendidas"]
+    "Inicialização": ["Proposta Técnica", "Contrato assinado", "Orçamento Inicial", "Alinhamento time MV", "Ata de reunião", "Alinhamento Cliente", "TAP", "DEP"],
+    "Planejamento": ["Evidência de Kick Off", "Ata de Reunião", "Cronograma", "Plano de Projeto"],
+    "Workshop de Processos": ["Análise de Gaps Críticos", "Business Blue Print", "Configuração do Sistema", "Apresentação da Solução", "Termo de Aceite"],
+    "Construção": ["Plano de Cutover", "Avaliação de Treinamento", "Lista de Presença", "Treinamento de Tabelas", "Carga Precursora", "Homologação Integração"],
+    "Go Live": ["Carga Final de Dados", "Escala Apoio Go Live", "Metas de Simulação", "Testes Integrados", "Reunição Go/No Go", "Ata de Reunião"],
+    "Operação Assistida": ["Suporte In Loco", "Pré-Onboarding", "Ata de Reunião", "Identificação de Gaps", "Termo de Aceite"],
+    "Finalização": ["Reunião de Finalização", "Ata de Reunião", "TEP", "Registro das Lições Aprendidas - MV LEARN - Sharepoint"]
 }
 
 MAPA_COLUNAS = {
@@ -49,7 +55,7 @@ MAPA_COLUNAS = {
     "Go Live": "go_live", "Operação Assistida": "operacao_assistida", "Finalização": "finalizacao"
 }
 
-# --- FUNÇÕES DE APOIO ---
+# --- FUNÇÕES AUXILIARES ---
 def gerar_radar_chart(realizado_dict):
     categorias = list(realizado_dict.keys())
     valores = list(realizado_dict.values())
@@ -57,35 +63,80 @@ def gerar_radar_chart(realizado_dict):
     angulos = [n / float(N) * 2 * np.pi for n in range(N)]
     angulos += angulos[:1]
     realizado = valores + valores[:1]
-    planejado = [100.0] * (N + 1)
     
-    fig, ax = plt.subplots(figsize=(6, 6), subplot_kw=dict(polar=True))
-    ax.plot(angulos, planejado, color='#143264', linewidth=1, linestyle='--', label="Ideal")
+    fig, ax = plt.subplots(figsize=(5, 5), subplot_kw=dict(polar=True))
+    ax.plot(angulos, [100.0]*(N+1), color='#143264', linewidth=1, linestyle='--')
     ax.plot(angulos, realizado, color='#ffb30e', linewidth=3, label="Realizado")
     ax.fill(angulos, realizado, color='#ffb30e', alpha=0.3)
-    plt.xticks(angulos[:-1], categorias, size=8)
+    plt.xticks(angulos[:-1], categorias, size=7, fontweight='bold')
     return fig
 
 class PDFExecutivo(FPDF):
     def header(self):
         self.set_fill_color(20, 50, 100)
-        self.rect(0, 0, 210, 45, 'F')
-        self.set_font('Helvetica', 'B', 18); self.set_text_color(255, 255, 255)
-        self.cell(190, 20, "STATUS REPORT EXECUTIVO - FR.IC.48", ln=True, align='C')
-        self.ln(25)
+        self.rect(0, 0, 210, 40, 'F')
+        if os.path.exists("Logomarca MV Atualizada.png"):
+            self.image("Logomarca MV Atualizada.png", x=10, y=8, w=22)
+        self.set_font('Helvetica', 'B', 16); self.set_text_color(255, 255, 255)
+        self.set_xy(35, 15)
+        self.cell(140, 10, "STATUS REPORT EXECUTIVO - HUB DE INTELIGENCIA", ln=True, align='C')
+        self.ln(20)
+
     def add_watermark(self):
-        self.set_font("Helvetica", 'B', 50); self.set_text_color(245, 245, 245)
-        with self.rotation(45, 105, 148): self.text(35, 190, "C O N F I D E N C I A L")
+        self.set_font("Helvetica", 'B', 50); self.set_text_color(248, 248, 248)
+        with self.rotation(45, 105, 148):
+            self.text(40, 160, "C O N F I D E N C I A L")
+
+    def desenhar_sparkline_pdf(self, perc_fases, y_pos):
+        x_start, largura_total = 25, 160
+        passo = largura_total / (len(perc_fases) - 1)
+        self.set_draw_color(200, 200, 200); self.set_line_width(0.8)
+        self.line(x_start, y_pos + 5, x_start + largura_total, y_pos + 5)
+        
+        for i, (fase, valor) in enumerate(perc_fases.items()):
+            x_circ = x_start + (i * passo)
+            if valor >= 100:
+                self.set_fill_color(20, 50, 100); self.set_draw_color(20, 50, 100)
+            elif valor > 0:
+                self.set_fill_color(20, 50, 100); self.set_draw_color(255, 179, 14); self.set_line_width(0.8)
+            else:
+                self.set_fill_color(230, 230, 230); self.set_draw_color(200, 200, 200)
+                
+            self.ellipse(x_circ - 3, y_pos + 2, 6, 6, 'FD')
+            self.set_font("Helvetica", 'B', 6); self.set_text_color(20, 50, 100)
+            self.text(x_circ - 8, y_pos + 12, fase[:15])
 
 # --- INTERFACE STREAMLIT ---
-st.set_page_config(page_title="Executive Hub FR.IC.48", layout="wide")
-st.title("🛡️ Gestão de Entregas e Conformidade")
+st.set_page_config(page_title="Executive Hub", layout="wide")
 
-c1, c2 = st.columns(2)
-nome_proj = c1.text_input("Nome do Projeto", placeholder="Ex: Hospital X")
-gp_proj = c2.text_input("Gerente de Projeto")
+# TITULO COM FONTE REDUZIDA
+st.markdown("<h2 style='font-size: 24px; color: #143264; font-weight: bold;'>🏛️ Hub de Inteligência | Governança e Metodologia</h2>", unsafe_allow_html=True)
 
-st.write("### 📋 Checklist do Projeto")
+# Busca de Projeto no Hub
+with st.sidebar:
+    st.header("🔍 Buscar no Hub")
+    projetos_salvos = [p.nome_projeto for p in session.query(Projeto.nome_projeto).distinct().all()]
+    projeto_busca = st.selectbox("Carregar Projeto Existente", [""] + projetos_salvos)
+
+# --- CAMPOS EXECUTIVOS ---
+with st.container():
+    c1, c2, c3 = st.columns(3)
+    nome_p = c1.text_input("Nome do Projeto", value=projeto_busca if projeto_busca else "")
+    oportunidade = c2.text_input("Oportunidade (CRM)")
+    gp_p = c3.text_input("Gerente de Projeto")
+
+    c4, c5, c6 = st.columns(3)
+    horas_cont = c4.number_input("Horas Contratadas", min_value=0.0, step=100.0 )
+    tipo_p = c5.selectbox("Tipo", ["Implantação", "Migração", "Revitalização", "Consultoria"])
+    resp_verificacao = c6.text_input("Responsável pela Verificação")
+
+    c7, c8, c9 = st.columns(3)
+    d_inicio = c7.date_input("Data de Início", format="DD/MM/YYYY")
+    d_termino = c8.date_input("Data de Término", format="DD/MM/YYYY")
+    d_producao = c9.date_input("Entrada em Produção", format="DD/MM/YYYY")
+
+# CHECKLIST COM A MESMA FONTE REDUZIDA
+st.markdown("<h3 style='font-size: 20px; color: #143264; font-weight: bold;'>📋 Checklist do Projeto</h3>", unsafe_allow_html=True)
 tabs = st.tabs(list(METODOLOGIA.keys()))
 perc_fases, detalhes_entrega = {}, {}
 
@@ -100,29 +151,23 @@ for i, (fase, itens) in enumerate(METODOLOGIA.items()):
             if checked: concluidos += 1
         perc_fases[fase] = (concluidos / len(itens)) * 100
 
-# --- SPARKLINE COM PERCENTUAIS ---
+# --- ESCALA DE PROGRESSÃO ---
 st.markdown("---")
 global_avg = sum(perc_fases.values()) / len(perc_fases)
-st.write(f"### 🛤️ Progresso Global Realizado: {global_avg:.1f}%")
+st.markdown(f"<h3 style='font-size: 20px; color: #143264; font-weight: bold;'>🛤️ Evolução da Implantação: {global_avg:.1f}%</h3>", unsafe_allow_html=True)
 
 cols_spark = st.columns(len(perc_fases))
 for i, (fase, valor) in enumerate(perc_fases.items()):
     with cols_spark[i]:
-        cor_marco = "#143264" if valor > 0 else "#ddd"
-        borda = "border: 2px solid #ffb30e;" if 0 < valor < 100 else ""
-        st.markdown(f"""
-            <div style='text-align: center;'>
-                <div style='display: inline-block; width: 22px; height: 22px; border-radius: 50%; background: {cor_marco}; {borda}'></div>
-                <p style='font-size: 10px; font-weight: bold; color: #143264; margin-bottom: 0;'>{fase}</p>
-                <p style='font-size: 11px; color: #ffb30e; font-weight: bold;'>{valor:.0f}%</p>
-            </div>
-        """, unsafe_allow_html=True)
+        cor_circulo = "#143264" if valor > 0 else "#eeeeee"
+        estilo_borda = "border: 3px solid #143264;" if valor >= 100 else ("border: 3px solid #ffb30e;" if valor > 0 else "border: 1px solid #cccccc;")
+        st.markdown(f"""<div style='text-align: center;'><div style='display: inline-block; width: 25px; height: 25px; border-radius: 50%; background: {cor_circulo}; {estilo_borda}'></div><p style='font-size: 11px; font-weight: bold; color: #143264; margin-top: 5px;'>{fase}</p></div>""", unsafe_allow_html=True)
 
-st.markdown("""<style> .stProgress > div > div > div > div { background-color: #143264; } </style>""", unsafe_allow_html=True)
 st.progress(global_avg / 100)
 
-# --- PROCESSAMENTO ---
-col_graf, col_btn = st.columns([2, 1])
+# --- HUB DE AÇÕES ---
+st.markdown("---")
+col_graf, col_btn = st.columns([1.5, 1])
 
 with col_graf:
     fig = gerar_radar_chart(perc_fases)
@@ -132,53 +177,55 @@ with col_graf:
     img_buf.seek(0)
 
 with col_btn:
-    st.subheader("⚙️ Hub Governança")
+    st.subheader("⚙️ Hub de Governança")
     
     if st.button("💾 SALVAR NO HUB DE INTELIGÊNCIA", use_container_width=True):
-        if nome_proj and gp_proj:
-            dados_db = {"nome_projeto": nome_proj, "gerente_projeto": gp_proj}
-            for f, v in perc_fases.items(): dados_db[MAPA_COLUNAS[f]] = v
+        if nome_p:
             try:
-                session.add(Projeto(**dados_db))
+                novo_projeto = Projeto(
+                    nome_projeto=nome_p, gerente_projeto=gp_p, oportunidade=oportunidade,
+                    horas_contratadas=horas_cont, tipo=tipo_p, responsavel_verificacao=resp_verificacao,
+                    data_inicio=d_inicio.strftime("%d/%m/%Y"), 
+                    data_termino=d_termino.strftime("%d/%m/%Y"), 
+                    data_producao=d_producao.strftime("%d/%m/%Y"),
+                    **{MAPA_COLUNAS[f]: v for f, v in perc_fases.items()}
+                )
+                session.add(novo_projeto)
                 session.commit()
-                st.toast(f"✅ Projeto {nome_proj} salvo com sucesso!", icon="💾")
-                st.success(f"Sincronizado às {datetime.now().strftime('%H:%M:%S')}")
+                st.success(f"✅ Snapshot de '{nome_p}' salvo com sucesso!")
+                st.rerun()
             except Exception as e:
-                st.error("Erro no DB. Delete o arquivo 'hub_inteligencia.db' da sua pasta e tente novamente.")
+                session.rollback()
+                st.error(f"Erro ao salvar: {e}")
+        else:
+            st.warning("Nome do Projeto é obrigatório.")
 
-    if st.button("📄 GERAR RELATÓRIO COM DIAGNÓSTICO", use_container_width=True, type="primary"):
-        if nome_proj:
-            st.toast("🤖 Analisando pendências e gerando visualização...", icon="⏳")
-            pdf = PDFExecutivo()
-            pdf.add_page(); pdf.add_watermark(); pdf.set_text_color(0,0,0)
-            pdf.set_font("Helvetica", 'B', 12)
-            pdf.cell(190, 8, f"PROJETO: {nome_proj.upper()}", ln=True)
-            pdf.cell(190, 8, f"GP: {gp_proj}", ln=True); pdf.ln(10)
-            
-            # Radar Chart em Memória
-            pdf.image(img_buf, x=60, w=90); pdf.ln(95)
-            
-            # Diagnóstico IA
-            pdf.set_fill_color(255, 243, 205); pdf.set_font("Helvetica", 'B', 11)
-            pdf.cell(190, 10, "DIAGNÓSTICO IA: PENDÊNCIAS E PRÓXIMOS PASSOS", 0, 1, 'L', True); pdf.ln(2)
-            
-            for fase, itens in detalhes_entrega.items():
-                pendentes = [i["doc"] for i in itens if i["status"] == "Pendente"]
-                if pendentes:
-                    pdf.set_font("Helvetica", 'I', 10); pdf.set_text_color(180, 0, 0)
-                    # Largura de 190mm para evitar erro de espaço horizontal
-                    msg = f"Fase {fase}: Resolver {len(pendentes)} pendência(s): {', '.join(pendentes[:3])}..."
-                    pdf.multi_cell(190, 6, msg, border='B')
-            
-            pdf_data = pdf.output()
-            st.toast("✅ Relatório pronto!", icon="📄")
-            
-            # Visualização Iframe base64
-            base64_pdf = base64.b64encode(pdf_data).decode('utf-8')
-            pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600"></iframe>'
-            st.markdown("### 👁️ Visualização do Relatório")
-            st.markdown(pdf_display, unsafe_allow_html=True)
-            
-            st.download_button("📥 BAIXAR RELATÓRIO PDF", data=pdf_data, file_name=f"Status_{nome_proj}.pdf", mime="application/pdf", use_container_width=True)
-        else: st.warning("Informe o nome do projeto.")
-
+    if st.button("📄 GERAR RELATÓRIO EXECUTIVO (IA)", use_container_width=True, type="primary"):
+        pdf = PDFExecutivo()
+        pdf.add_page(); pdf.add_watermark()
+        
+        # Grid Executiva dd/mm/aaaa
+        pdf.set_font("Helvetica", 'B', 8); pdf.set_text_color(20, 50, 100); pdf.set_fill_color(245, 245, 245)
+        pdf.cell(63, 7, f" PROJETO: {nome_p.upper()}", 1, 0, 'L', True)
+        pdf.cell(63, 7, f" OPORTUNIDADE: {oportunidade}", 1, 0, 'L', True)
+        pdf.cell(64, 7, f" GP: {gp_p}", 1, 1, 'L', True)
+        pdf.cell(63, 7, f" INICIO: {d_inicio.strftime('%d/%m/%Y')}", 1, 0, 'L')
+        pdf.cell(63, 7, f" TERMINO: {d_termino.strftime('%d/%m/%Y')}", 1, 0, 'L')
+        pdf.cell(64, 7, f" PRODUCAO: {d_producao.strftime('%d/%m/%Y')}", 1, 1, 'L')
+        
+        pdf.ln(5); pdf.desenhar_sparkline_pdf(perc_fases, pdf.get_y()); pdf.set_y(pdf.get_y() + 20)
+        pdf.image(img_buf, x=65, w=80); pdf.ln(80)
+        
+        # Detalhamento IA
+        pdf.set_fill_color(255, 243, 205); pdf.set_font("Helvetica", 'B', 10)
+        pdf.cell(190, 8, " INTELIGENCIA DE ENTREGA: DIAGNOSTICO DE PENDENCIAS", 0, 1, 'L', True)
+        pdf.set_font("Helvetica", '', 8); pdf.set_text_color(50, 50, 50)
+        
+        for fase, itens in detalhes_entrega.items():
+            pend = [i["doc"] for i in itens if i["status"] == "Pendente"]
+            if pend:
+                pdf.set_font("Helvetica", 'B', 8); pdf.cell(190, 5, f"> Fase {fase}:", ln=True)
+                pdf.set_font("Helvetica", '', 8); pdf.multi_cell(190, 4, f" Pendencias Criticas: {', '.join(pend[:5])}...")
+                pdf.ln(1)
+        
+        st.download_button("📥 BAIXAR RELATORIO PDF", data=bytes(pdf.output()), file_name=f"Executive_Report_{nome_p}.pdf", mime="application/pdf", use_container_width=True)

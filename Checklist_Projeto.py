@@ -137,34 +137,13 @@ elif modo == "Dashboard Regional":
         st.dataframe(df_gerente, use_container_width=True, hide_index=True, 
                      column_config={"Média de Entrega %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%")})
 
-        # --- GRÁFICO DE BARRAS HORIZONTAIS: COMPARATIVO POR GERENTE ---
-        st.markdown("---")
-        st.markdown("### 📈 Ranking Executivo: Gerentes de Projeto")
-        
-        # Invertendo para o ranking (melhor no topo)
-        df_chart = df_gerente.sort_values(by='Média de Entrega %', ascending=True)
-        
-        fig_bar, ax_bar = plt.subplots(figsize=(10, len(df_chart) * 0.8 + 2))
-        barras = ax_bar.barh(df_chart['Gerente'], df_chart['Média de Entrega %'], color='#143264')
-        
-        ax_bar.set_xlabel('Média de Conclusão da Carteira (%)', fontweight='bold', color='#143264')
-        ax_bar.set_xlim(0, 105)
-        ax_bar.spines['top'].set_visible(False)
-        ax_bar.spines['right'].set_visible(False)
-        
-        for bar in barras:
-            width = bar.get_width()
-            ax_bar.text(width + 1, bar.get_y() + bar.get_height()/2, f'{width:.1f}%', 
-                        va='center', fontsize=10, fontweight='bold', color='#143264')
-
-        st.pyplot(fig_bar)
-
         # Detalhamento Individual (Tabela completa abaixo do gráfico)
         with st.expander("🔍 Visualizar Detalhes por Projeto Individual"):
             st.dataframe(df[['gerente_projeto', 'nome_projeto', 'regional', 'Progresso %']].sort_values(by='Progresso %', ascending=False))
 
     else:
         st.info("Nenhum projeto registrado no Hub de Inteligência.")
+
 
 
 

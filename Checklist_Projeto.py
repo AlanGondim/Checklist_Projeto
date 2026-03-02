@@ -204,7 +204,7 @@ elif modo == "Dashboard Regional":
             
             # Usando st.bar_chart configurado para horizontal através de Matplotlib para maior controle
             fig_bar, ax_bar = plt.subplots(figsize=(10, len(df_chart) * 0.6 + 2))
-            barras = ax_bar.barh(df_chart['nome_projeto'], df_chart['Progresso Global %'], color='#143264')
+            barras = ax_bar.barh(df_chart['gerente_projeto'], df_chart['Progresso Global %'], color='#143264')
             
             ax_bar.set_xlabel('Progresso Global %', fontweight='bold', color='#143264')
             ax_bar.set_xlim(0, 105)
@@ -222,6 +222,7 @@ elif modo == "Dashboard Regional":
             st.warning("Sem dados para os filtros selecionados.")
     else:
         st.info("Nenhum projeto registrado.")
+
 
 
 

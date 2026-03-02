@@ -63,62 +63,80 @@ if modo == "Checklist Operacional":
         gp_p = c2.text_input("Gerente de Projeto")
         reg_p = c3.selectbox("Regional", ["Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
 
-    # --- LÓGICA DE TRAVA ---
+    # --- PROCESSAMENTO DE PERCENTUAIS (CÁLCULO PRÉVIO PARA O SPARKLINE) ---
     fases_lista = list(METODOLOGIA.keys())
-    tabs = st.tabs(fases_lista)
     perc_fases = {}
+    
+    # Criamos um dicionário temporário para armazenar o estado dos checkboxes antes das abas
+    # para que o sparkline possa refletir as mudanças instantaneamente.
+    for fase in fases_lista:
+        perc_fases[fase] = 0.0
 
+    st.markdown("---")
+    # --- LINHA DO TEMPO COM FATIAS (CONIC-GRADIENT) ---
+    st.markdown("<h3 style='font-size: 18px; color: #143264;'>🛤️ Linha do Tempo da Metodologia</h3>", unsafe_allow_html=True)
+    
+    # Estilos CSS para os círculos de progresso (Pie Circles) e a linha conectora
+    st.markdown("""
+        <style>
+        .timeline-container { display: flex; align-items: center; justify-content: space-between; position: relative; padding: 20px 0; }
+        .timeline-line { position: absolute; top: 35px; left: 5%; right: 5%; height: 4px; background-color: #143264; z-index: 1; }
+        .step-wrapper { z-index: 2; text-align: center; background: white; padding: 0 5px; }
+        .pie-circle { 
+            width: 40px; height: 40px; border-radius: 50%; display: inline-block;
+            transition: all 0.3s ease; box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    spark_cols = st.columns(len(fases_lista))
+    
+    # Abaixo, criamos as Tabs mas a lógica de checklist deve vir dentro delas
+    tabs = st.tabs(fases_lista)
+    
     for i, fase in enumerate(fases_lista):
         with tabs[i]:
-            # Verifica se a fase anterior atingiu 100%
+            # Lógica da Trava
             if i > 0 and perc_fases.get(fases_lista[i-1], 0) < 100:
-                st.error(f"🚨 FASE BLOQUEADA: Conclua 100% da fase anterior ({fases_lista[i-1]}) para habilitar '{fase}'.")
+                st.error(f"🚨 FASE BLOQUEADA: Conclua 100% da fase anterior para liberar '{fase}'.")
                 perc_fases[fase] = 0.0
             else:
                 concluidos = 0
                 itens = METODOLOGIA[fase]
-                cols = st.columns(2)
+                cols_check = st.columns(2)
                 for idx, item in enumerate(itens):
-                    if cols[idx % 2].checkbox(item, key=f"c_{fase}_{item}"):
+                    if cols_check[idx % 2].checkbox(item, key=f"c_{fase}_{item}"):
                         concluidos += 1
                 perc_fases[fase] = (concluidos / len(itens)) * 100
-                st.info(f"Progresso de {fase}: {perc_fases[fase]:.1f}%")
 
-# --- NOVO BLOCO: SPARKLINE VISUAL DAS FASES ---
-    st.markdown("---")
-    st.markdown("<h3 style='font-size: 18px; color: #143264;'>🛤️ Linha do Tempo da Metodologia</h3>", unsafe_allow_html=True)
-    
-    cols_spark = st.columns(len(fases_lista))
+    # RENDERIZAÇÃO DO SPARKLINE (Depois de processar os checkboxes para pegar os valores atuais)
+    st.markdown("<div class='timeline-line'></div>", unsafe_allow_html=True)
+    cols_visual = st.columns(len(fases_lista))
     for i, fase in enumerate(fases_lista):
-        with cols_spark[i]:
-            valor = perc_fases.get(fase, 0)
-            # Regra: Azul marinho se concluído, Cinza com borda amarela se pendente
-            if valor >= 100:
-                bg_color = "#143264"
-                border_style = "none"
-                text_color = "#143264"
-            else:
-                bg_color = "#E0E0E0"
-                border_style = "2px solid #FFD700" # Amarelo destacado
-                text_color = "#757575"
-            
+        valor = perc_fases[fase]
+        # Determina a borda: Amarela se houver pendência (<100)
+        border_color = "#FFD700" if valor < 100 else "#143264"
+        
+        # Conic-gradient simula as fatias preenchidas
+        with cols_visual[i]:
             st.markdown(f"""
-                <div style='text-align: center;'>
-                    <div style='display: inline-block; width: 30px; height: 30px; border-radius: 50%; 
-                         background-color: {bg_color}; border: {border_style}; box-shadow: 1px 1px 3px rgba(0,0,0,0.1);'>
+                <div style='text-align: center; position: relative; z-index: 10;'>
+                    <div class='pie-circle' style='
+                        background: conic-gradient(#143264 {valor}%, #E0E0E0 0);
+                        border: 3px solid {border_color};'>
                     </div>
-                    <p style='font-size: 11px; font-weight: bold; color: {text_color}; margin-top: 5px;'>{fase}</p>
-                    <p style='font-size: 12px; font-weight: bold; color: #FFD700;'>{valor:.0f}%</p>
+                    <p style='font-size: 10px; font-weight: bold; color: #143264; margin-top: 5px; height: 30px;'>{fase}</p>
+                    <p style='font-size: 13px; font-weight: bold; color: #143264;'>{valor:.0f}%</p>
                 </div>
             """, unsafe_allow_html=True)
+
     st.markdown("---")
-    
-    if st.button("💾 SALVAR NO HUB"):
+    if st.button("💾 SALVAR NO HUB", use_container_width=True):
         if nome_p:
             novo = Projeto(nome_projeto=nome_p, gerente_projeto=gp_p, regional=reg_p,
                            **{MAPA_COLUNAS[f]: v for f, v in perc_fases.items()})
             session.add(novo); session.commit()
-            st.success("Dados salvos com sucesso!")
+            st.success("Dados salvos e dashboard regional atualizado!")
         else:
             st.warning("O Nome do Projeto é obrigatório.")
 
@@ -184,6 +202,7 @@ elif modo == "Dashboard Regional":
             st.warning("Sem dados para os filtros selecionados.")
     else:
         st.info("Nenhum projeto registrado.")
+
 
 
 

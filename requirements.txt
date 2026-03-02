@@ -1,9 +1,8 @@
-streamlit
 pandas
+streamlit
 matplotlib
 numpy
-sqlalchemy
-fpdf2
-
-
-
+SQLAlchemy
+fpdf
+qrcode
+pillow

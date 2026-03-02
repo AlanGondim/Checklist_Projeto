@@ -64,7 +64,7 @@ if modo == "Checklist Operacional":
         gp_p = c3.text_input("Gerente de Projeto")
 
         c4, c5, c6 = st.columns(3)
-        horas_cont = c4.number_input("Horas Contratadas", min_value=0.0)
+        horas_cont = c4.number_input("Horas Contratadas", min_value=0.0, step=10.0)
         tipo_p = c5.selectbox("Tipo do Projeto", ["Migração", "Implantação", "Consultoria", "Revitalização"])
         reg_p = c6.selectbox("Regional", ["Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
 
@@ -222,6 +222,7 @@ elif modo == "Dashboard Regional":
             st.warning("Sem dados para os filtros selecionados.")
     else:
         st.info("Nenhum projeto registrado.")
+
 
 
 

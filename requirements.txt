@@ -3,5 +3,6 @@ pandas
 matplotlib
 numpy
 SQLAlchemy
-fpdf2
+fpdf
+
 

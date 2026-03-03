@@ -267,22 +267,22 @@ elif modo == "Dashboard Regional":
             df_detalhe = df_detalhe.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
 
             # Dashboard Regional:
-colunas_view = ['id', 'nome_projeto', 'gerente_projeto', 'regional', 'tipo', 'Progresso %'] + col_fases_reais
-df_display = df_detalhe[colunas_view].sort_values(by='Progresso %', ascending=False)
-
-# Na configuração do st.dataframe, oculte o ID para o usuário não ver
-evento_selecao = st.dataframe(
-    df_display,
-    use_container_width=True,
-    hide_index=True,
-    on_select="rerun",
-    selection_mode="single-row",
-    column_config={
-        "id": None,  # Isso oculta a coluna ID
-        "Progresso %": st.column_config.ProgressColumn("Progresso Total", min_value=0, max_value=100, format="%.1f%%"),
-        **{fase: st.column_config.NumberColumn(f"{fase} %", format="%.0f%%") for fase in col_fases_reais}
-    }
-)
+            colunas_view = ['id', 'nome_projeto', 'gerente_projeto', 'regional', 'tipo', 'Progresso %'] + col_fases_reais
+            df_display = df_detalhe[colunas_view].sort_values(by='Progresso %', ascending=False)
+            
+            # Na configuração do st.dataframe, oculte o ID para o usuário não ver
+            evento_selecao = st.dataframe(
+                df_display,
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                column_config={
+                    "id": None,  # Isso oculta a coluna ID
+                    "Progresso %": st.column_config.ProgressColumn("Progresso Total", min_value=0, max_value=100, format="%.1f%%"),
+                    **{fase: st.column_config.NumberColumn(f"{fase} %", format="%.0f%%") for fase in col_fases_reais}
+                }
+            )
 
             # Lógica para abrir o Popup ao selecionar a linha
             if len(evento_selecao.selection.rows) > 0:
@@ -292,6 +292,7 @@ evento_selecao = st.dataframe(
                 
                 # Chama a função de popup definida no passo 1
                 modal_pendencias(dados_projeto)
+
 
 
 

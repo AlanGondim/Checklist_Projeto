@@ -55,6 +55,33 @@ MAPA_COLUNAS = {
     "Go Live": "go_live", "Operação Assistida": "operacao_assistida", "Finalização": "finalizacao"
 }
 
+# --- FUNÇÃO PARA APRESENTAR ARTEFATOS PENDENTES (POPUP) ---
+@st.dialog("📋 Artefatos Pendentes por Fase", width="large")
+def modal_pendencias(projeto_data):
+    st.write(f"### Projeto: {projeto_data['nome_projeto']}")
+    st.write(f"**Gerente:** {projeto_data['gerente_projeto']} | **Regional:** {projeto_data['regional']}")
+    st.markdown("---")
+    
+    # Percorre cada fase da metodologia
+    for fase, itens in METODOLOGIA.items():
+        # Busca o percentual concluído desta fase no projeto selecionado
+        col_db = MAPA_COLUNAS[fase]
+        percentual = projeto_data[col_db]
+        
+        if percentual < 100:
+            with st.expander(f"⚠️ {fase} ({percentual:.0f}% concluído)", expanded=True):
+                # Como o seu banco atual guarda apenas o %, aqui listamos todos os itens
+                # Em uma melhoria futura, você pode salvar item por item no DB
+                st.write("Verifique os itens pendentes para esta fase:")
+                for item in itens:
+                    # Simulação visual de check (você pode adaptar conforme sua necessidade)
+                    st.markdown(f"- [ ] {item}")
+        else:
+            st.success(f"✅ {fase}: Todos os artefatos entregues.")
+
+    if st.button("Fechar"):
+        st.rerun()
+
 # --- INTERFACE ---
 st.set_page_config(page_title="Hub de Inteligência MV", layout="wide")
 modo = st.sidebar.radio("Navegação", ["Checklist Operacional", "Dashboard Regional"])
@@ -182,26 +209,34 @@ elif modo == "Dashboard Regional":
             # --- TABELA COMPLETA INTERATIVA (EM SUBSTITUIÇÃO AO GRÁFICO) ---
             st.markdown("---")
             st.markdown("### 🔎 Detalhamento Completo da Carteira")
-            st.info("A tabela abaixo apresenta todos os projetos filtrados com o status de cada fase da metodologia.")
+            st.info("💡 **Dica:** Clique em uma linha da tabela para visualizar quais artefatos estão pendentes por fase.")
             
             # Preparação do DataFrame Detalhado
             df_detalhe = df_filt.copy()
-            # Renomear colunas do DB para nomes legíveis da Metodologia
             df_detalhe = df_detalhe.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
             
-            # Seleção e Ordenação das Colunas
             colunas_view = ['nome_projeto', 'gerente_projeto', 'regional', 'tipo', 'Progresso %'] + col_fases_reais
-            df_detalhe = df_detalhe[colunas_view].sort_values(by='Progresso %', ascending=False)
+            df_display = df_detalhe[colunas_view].sort_values(by='Progresso %', ascending=False)
 
-            # Configuração da Tabela Interativa
-            st.dataframe(
-                df_detalhe,
+            # --- NOVA TABELA INTERATIVA COM SELEÇÃO ---
+            evento_selecao = st.dataframe(
+                df_display,
                 use_container_width=True,
                 hide_index=True,
+                on_select="rerun", # Faz a página reagir ao clique
+                selection_mode="single-row", # Permite selecionar uma linha por vez
                 column_config={
                     "Progresso %": st.column_config.ProgressColumn("Progresso Total", min_value=0, max_value=100, format="%.1f%%"),
                     **{fase: st.column_config.NumberColumn(f"{fase} %", format="%.0f%%") for fase in col_fases_reais}
                 }
             )
-        else: st.warning("Nenhum projeto encontrado para os filtros selecionados.")
-    else: st.info("Nenhum projeto registrado.")
+
+            # Lógica para abrir o Popup ao selecionar a linha
+            if len(evento_selecao.selection.rows) > 0:
+                # Recupera os dados da linha selecionada
+                idx_selecionado = evento_selecao.selection.rows[0]
+                dados_projeto = df_detalhe.iloc[idx_selecionado]
+                
+                # Chama a função de popup definida no passo 1
+                modal_pendencias(dados_projeto)
+

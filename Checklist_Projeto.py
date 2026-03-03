@@ -51,6 +51,31 @@ class AuditoriaHistorico(Base):
 
 Base.metadata.create_all(engine)
 
+class ItemAuditoria(Base):
+    __tablename__ = 'itens_auditados'
+    id = Column(Integer, primary_key=True)
+    projeto_id = Column(Integer)
+    fase = Column(String)
+    item_nome = Column(String)
+    entregue = Column(Integer)  # 1 para Sim, 0 para Não
+
+def get_status_itens(projeto_id):
+    itens = session.query(ItemAuditoria).filter(ItemAuditoria.projeto_id == projeto_id).all()
+    return {(item.fase, item.item_nome): bool(item.entregue) for item in itens}
+
+def salvar_status_itens(projeto_id, status_dict):
+    # Remove registros antigos para atualizar
+    session.query(ItemAuditoria).filter(ItemAuditoria.projeto_id == projeto_id).delete()
+    for (fase, item_nome), entregue in status_dict.items():
+        novo_item = ItemAuditoria(
+            projeto_id=projeto_id,
+            fase=fase,
+            item_nome=item_nome,
+            entregue=1 if entregue else 0
+        )
+        session.add(novo_item)
+    session.commit()
+
 # --- METODOLOGIA ---
 METODOLOGIA = {
     "Inicialização": ["Proposta Técnica", "Contrato assinado", "Orçamento Inicial", "Alinhamento time MV", "Ata de reunião", "Alinhamento Cliente", "TAP", "DEP"],
@@ -68,59 +93,75 @@ MAPA_COLUNAS = {
     "Go Live": "go_live", "Operação Assistida": "operacao_assistida", "Finalização": "finalizacao"
 }
 
-@st.dialog("📋 Auditoria e Controle de Artefatos", width="large")
+@st.dialog("📋 Auditoria de Rastreabilidade Integral", width="large")
 def modal_pendencias(projeto_data):
+    projeto_id = int(projeto_data['id'])
     st.write(f"### Projeto: {projeto_data['nome_projeto']}")
     
-    tab1, tab2 = st.tabs(["📝 Nova Auditoria", "History Histórico de Evolução"])
-    
+    # Carrega o que já foi entregue anteriormente do banco de dados
+    status_atual = get_status_itens(projeto_id)
+    novos_status = {}
+
+    tab1, tab2 = st.tabs(["📝 Atualizar Auditoria", "📜 Histórico"])
+
     with tab1:
-        st.write("**Status Atual da Metodologia**")
-        # Identifica a fase atual (última fase com progresso > 0 e < 100)
-        fase_atual_nome = "Finalizado"
-        for fase in METODOLOGIA.keys():
-            if projeto_data.get(fase, 0) < 100:
-                fase_atual_nome = fase
-                break
+        st.info("Os itens marcados abaixo já foram validados em auditorias anteriores.")
         
+        # Itera por todas as fases e itens da METODOLOGIA
+        for fase, itens in METODOLOGIA.items():
+            with st.expander(f"Fase: {fase}", expanded=(fase in projeto_data['nome_projeto'])): # Expande se necessário
+                for item in itens:
+                    # Verifica se o item já estava marcado no banco
+                    valor_previo = status_atual.get((fase, item), False)
+                    
+                    # O checkbox já vem marcado se o item foi entregue antes
+                    check = st.checkbox(f"{item}", value=valor_previo, key=f"chk_{projeto_id}_{fase}_{item}")
+                    novos_status[(fase, item)] = check
+
+        st.divider()
         c1, c2 = st.columns(2)
-        nova_data = c1.date_input("Data da Nova Auditoria", format="DD/MM/YYYY")
+        nova_data = c1.date_input("Data da Auditoria", format="DD/MM/YYYY")
         novo_resp = c2.text_input("Analista Auditor", value=projeto_data.get('responsavel_auditoria', ''))
 
-        st.markdown(f"**Fase em Auditoria:** `{fase_atual_nome}`")
-        
-        # Lista artefatos da fase atual para conferência
-        itens = METODOLOGIA.get(fase_atual_nome, [])
-        for item in itens:
-            st.checkbox(item, key=f"audit_{item}")
+        if st.button("💾 Finalizar e Salvar Evolução", use_container_width=True):
+            # 1. Salva os itens individuais (Rastreabilidade)
+            salvar_status_itens(projeto_id, novos_status)
+            
+            # 2. Calcula novo percentual por fase para atualizar a tabela principal
+            updates_projeto = {}
+            total_concluido = 0
+            for fase, itens_fase in METODOLOGIA.items():
+                concluidos_fase = sum(1 for item in itens_fase if novos_status.get((fase, item)))
+                perc_fase = (concluidos_fase / len(itens_fase)) * 100
+                updates_projeto[MAPA_COLUNAS[fase]] = perc_fase
+                total_concluido += perc_fase
 
-        if st.button("💾 Registrar Auditoria e Atualizar Snapshot"):
-            try:
-                # 1. Salva no histórico
-                nova_auditoria = AuditoriaHistorico(
-                    projeto_id=int(projeto_data['id']),
-                    nome_projeto=projeto_data['nome_projeto'],
-                    data_auditoria=str(nova_data),
-                    responsavel_auditoria=novo_resp,
-                    progresso_total=float(projeto_data['Progresso %']),
-                    fase_atual=fase_atual_nome
-                )
-                session.add(nova_auditoria)
-                
-                # 2. Atualiza os dados principais do projeto com a data/responsável da última auditoria
-                proj_db = session.query(Projeto).filter(Projeto.id == int(projeto_data['id'])).first()
-                proj_db.data_auditoria = str(nova_data)
-                proj_db.responsavel_auditoria = novo_resp
-                
-                session.commit()
-                st.success("Auditoria registrada com sucesso!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Erro ao salvar: {e}")
+            # 3. Atualiza a tabela principal do Projeto
+            proj_db = session.query(Projeto).filter(Projeto.id == projeto_id).first()
+            for col, val in updates_projeto.items():
+                setattr(proj_db, col, val)
+            proj_db.data_auditoria = str(nova_data)
+            proj_db.responsavel_auditoria = novo_resp
+            
+            # 4. Gera registro no histórico de snapshots
+            nova_aud = AuditoriaHistorico(
+                projeto_id=projeto_id,
+                nome_projeto=projeto_data['nome_projeto'],
+                data_auditoria=str(nova_data),
+                responsavel_auditoria=novo_resp,
+                progresso_total=total_concluido / len(METODOLOGIA),
+                fase_atual="Atualizado"
+            )
+            session.add(nova_aud)
+            session.commit()
+            
+            st.success("Rastreabilidade atualizada! Todos os itens marcados foram salvos.")
+            st.rerun()
 
     with tab2:
-        st.write("**Linha do Tempo de Auditorias**")
-        historico = session.query(AuditoriaHistorico)\
+        # (Mantém a lógica de histórico anterior...)
+        historico = session.query(AuditoriaHistorico).filter(AuditoriaHistorico.projeto_id == projeto_id).all()
+        st.table([{"Data": h.data_auditoria, "Progresso": f"{h.progresso_total:.1f}%", "Auditor": h.responsavel_auditoria} for h in historico])
             .filter(AuditoriaHistorico.projeto_id == int(projeto_data['id']))\
             .order_by(desc(AuditoriaHistorico.timestamp)).all()
         
@@ -292,6 +333,7 @@ elif modo == "Dashboard Regional":
                 
                 # Chama a função de popup definida no passo 1
                 modal_pendencias(dados_projeto)
+
 
 
 

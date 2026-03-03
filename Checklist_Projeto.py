@@ -9,8 +9,6 @@ from datetime import datetime
 import io
 import os
 
-
-
 # --- DATABASE SETUP ---
 Base = declarative_base()
 DB_NAME = 'sqlite:///hub_inteligencia_executivo.db'
@@ -95,88 +93,85 @@ def get_status_itens(projeto_id):
 # --- POPUP DE AUDITORIA ---
 @st.dialog("📋 Auditoria de Rastreabilidade Integral", width="large")
 def popup_auditoria(projeto_id):
-    # Consulta o projeto novamente para garantir que a sessão está ativa
+    # Re-consulta para garantir sessão ativa
     proj = session.query(Projeto).filter(Projeto.id == projeto_id).first()
     st.write(f"### Projeto: {proj.nome_projeto}")
-   
-
+    
     status_db = get_status_itens(proj.id)
     t1, t2, t3 = st.tabs(["🔍 Auditoria Técnica (Gaps)", "📜 Histórico", "📂 Evidências"])
- 
+    
     with t1:
-        st.info("Artefatos com ✅ foram validados. Itens sem marcação são pendências (Gaps).")
+        st.info("Artefatos validados aparecem com ✅. Itens desmarcados são pendências.")
         novos_status = {}
-        total_check = 0
-        total_geral = 0
-       
-
+        total_entregue = 0
+        total_itens = 0
+        
         for fase, itens in METODOLOGIA.items():
-            # Cálculo de percentual real baseado nos itens do banco
-            entregues_fase = sum(1 for i in itens if status_db.get((fase, i), False))
-            perc_fase = (entregues_fase / len(itens)) * 100
-           
-            with st.expander(f"Fase: {fase} | Status: {perc_fase:.0f}%", expanded=(perc_fase < 100)):
+            fase_concluidos = sum(1 for i in itens if status_db.get((fase, i), False))
+            perc_fase = (fase_concluidos / len(itens)) * 100
+            
+            with st.expander(f"{fase} - {perc_fase:.0f}% Concluído", expanded=(perc_fase < 100)):
+                st.progress(perc_fase / 100)
                 for item in itens:
                     entregue_antes = status_db.get((fase, item), False)
-                    res = st.checkbox(f"{item}", value=entregue_antes, key=f"aud_{proj.id}_{fase}_{item}")
+                    res = st.checkbox(item, value=entregue_antes, key=f"aud_{proj.id}_{fase}_{item}")
                     novos_status[(fase, item)] = res
-                    if res: total_check += 1
-                    total_geral += 1
-       
+                    if res: total_entregue += 1
+                    total_itens += 1
+        
         st.divider()
         c1, c2 = st.columns(2)
-        auditor = c1.text_input("Analista Auditor Responsável", value=proj.responsavel_auditoria if proj.responsavel_auditoria else "")
+        auditor = c1.text_input("Analista Auditor MV", value=proj.responsavel_auditoria if proj.responsavel_auditoria else "")
         data_aud = c2.date_input("Data da Auditoria", value=datetime.now())
-       
-
-        if st.button("🚀 CONSOLIDAR AUDITORIA E SALVAR SNAPSHOT", use_container_width=True):
-            # 1. Atualizar Itens Detalhados
+        
+        if st.button("🚀 CONSOLIDAR AUDITORIA", use_container_width=True):
+            # 1. Salvar itens individuais
             session.query(StatusItem).filter(StatusItem.projeto_id == proj.id).delete()
             for (f, i), val in novos_status.items():
                 session.add(StatusItem(projeto_id=proj.id, fase=f, item=i, entregue=1 if val else 0))
-           
-            # 2. Atualizar Percentuais na Tabela Principal
+            
+            # 2. Atualizar Projeto
             for fase in METODOLOGIA.keys():
                 count = sum(1 for it in METODOLOGIA[fase] if novos_status.get((fase, it)))
                 setattr(proj, MAPA_COLUNAS[fase], (count / len(METODOLOGIA[fase])) * 100)
-          
+            
             proj.data_auditoria = str(data_aud)
             proj.responsavel_auditoria = auditor
-           
-            # 3. Registrar no Histórico
-            prog_total = (total_check / total_geral) * 100
+            
+            # 3. Histórico (Rastreabilidade Jurídica)
+            prog_total = (total_entregue / total_itens) * 100
             session.add(AuditoriaHistorico(projeto_id=proj.id, data_auditoria=str(data_aud), responsavel=auditor, progresso_total=prog_total))
             
             session.commit()
             st.success("Auditoria Consolidada!"); st.rerun()
 
     with t2:
-        st.write("### Linha do Tempo de Performance")
+        st.write("### Histórico de Snapshots")
         historico = session.query(AuditoriaHistorico).filter(AuditoriaHistorico.projeto_id == proj.id).order_by(desc(AuditoriaHistorico.timestamp)).all()
         if historico:
-            df_h = pd.DataFrame([{
+            df_hist = pd.DataFrame([{
                 "Data": h.data_auditoria,
                 "Auditor": h.responsavel,
                 "Performance": f"{h.progresso_total:.1f}%",
-                "Registro": h.timestamp.strftime("%d/%m %H:%M")
+                "Hora Registro": h.timestamp.strftime("%H:%M")
             } for h in historico])
-            st.table(df_h)
-        else: st.info("Nenhum histórico de auditoria encontrado.")
+            st.table(df_h if 'df_h' in locals() else df_hist)
+        else: st.info("Sem histórico registrado.")
 
     with t3:
-        st.write("### 📎 Depósito de Evidências (Prints/Docs)")
-        fase_ev = st.selectbox("Vincular evidência à fase:", list(METODOLOGIA.keys()))
-        up_file = st.file_uploader("Upload de arquivos", type=['png', 'jpg', 'pdf', 'docx'], key="up_pop")
-        if st.button("📤 Salvar Documento"):
+        st.write("### 📎 Depósito de Evidências (Prints/PDFs)")
+        f_ev = st.selectbox("Fase:", list(METODOLOGIA.keys()))
+        up_file = st.file_uploader("Upload", key="up_file_audit")
+        if st.button("Salvar Arquivo"):
             if up_file:
-                path = os.path.join("evidencias_audit", f"{proj.id}_{fase_ev}_{up_file.name}")
+                path = os.path.join("evidencias_audit", f"{proj.id}_{f_ev}_{up_file.name}")
                 with open(path, "wb") as f: f.write(up_file.getbuffer())
-                session.add(Evidencia(projeto_id=proj.id, fase=fase_ev, nome_arquivo=up_file.name, caminho=path))
-                session.commit(); st.success("Arquivo anexado com sucesso!")
-      
+                session.add(Evidencia(projeto_id=proj.id, fase=f_ev, nome_arquivo=up_file.name, caminho=path))
+                session.commit(); st.success("Evidência salva!")
+        
         st.divider()
-        evidencias = session.query(Evidencia).filter(Evidencia.projeto_id == proj.id).all()
-        for ev in evidencias:
+        evs = session.query(Evidencia).filter(Evidencia.projeto_id == proj.id).all()
+        for ev in evs:
             with st.expander(f"📄 {ev.fase}: {ev.nome_arquivo}"):
                 if ev.nome_arquivo.lower().endswith(('png', 'jpg', 'jpeg')):
                     st.image(ev.caminho)
@@ -302,3 +297,4 @@ elif modo == "Dashboard Regional":
             # Passamos o ID para o popup buscar os dados frescos
 
             popup_auditoria(int(df_display.iloc[idx]['id']))
+

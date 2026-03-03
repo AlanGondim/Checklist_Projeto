@@ -226,29 +226,30 @@ def popup_auditoria(projeto_id):
                 session.add(StatusItem(projeto_id=novo.id, fase=f, item=i, entregue=1 if v else 0))
             session.commit(); st.success("Projeto e Checklist salvos!")
 
-elif modo == "Dashboard Regional":
-    st.markdown("<h2 style='color: #143264;'>📊 Dashboard de Governança</h2>", unsafe_allow_html=True)
-    projs = session.query(Projeto).all()
-    if projs:
-        # Lógica de cálculo dinâmico para a escala de progresso do dashboard
-        df_list = []
-        for p in projs:
-            d = vars(p).copy()
-            itens = session.query(StatusItem).filter(StatusItem.projeto_id == p.id).all()
-            if itens:
-                d['Progresso %'] = round((sum(1 for i in itens if i.entregue) / sum(len(v) for v in METODOLOGIA.values())) * 100, 1)
-            else:
-                d['Progresso %'] = 0.0
-            df_list.append(d)            
-        df = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
-        df_display = df.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})        
-        selecao = st.dataframe(
-            df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'data_auditoria']], 
-            use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
-            column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%")}
-        )
-        if len(selecao.selection.rows) > 0:
-            popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+    elif modo == "Dashboard Regional":
+        st.markdown("<h2 style='color: #143264;'>📊 Dashboard de Governança</h2>", unsafe_allow_html=True)
+        projs = session.query(Projeto).all()
+        if projs:
+            # Lógica de cálculo dinâmico para a escala de progresso do dashboard
+            df_list = []
+            for p in projs:
+                d = vars(p).copy()
+                itens = session.query(StatusItem).filter(StatusItem.projeto_id == p.id).all()
+                if itens:
+                    d['Progresso %'] = round((sum(1 for i in itens if i.entregue) / sum(len(v) for v in METODOLOGIA.values())) * 100, 1)
+                else:
+                    d['Progresso %'] = 0.0
+                df_list.append(d)            
+            df = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
+            df_display = df.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})        
+            selecao = st.dataframe(
+                df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'data_auditoria']], 
+                use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
+                column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%")}
+            )
+            if len(selecao.selection.rows) > 0:
+                popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

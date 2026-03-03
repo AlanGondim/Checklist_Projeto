@@ -151,17 +151,19 @@ if modo == "Checklist Operacional":
 
     fases_lista = list(METODOLOGIA.keys())
     perc_fases = {}
-    
     st.markdown("---")
     tabs = st.tabs(fases_lista)
     checks_operacionais = {} # Para salvar o estado detalhado já no primeiro clique
-
     for i, fase in enumerate(fases_lista):
         with tabs[i]:
             if i > 0 and perc_fases.get(fases_lista[i-1], 0) < 100:
                 st.error(f"🚨 FASE BLOQUEADA: Conclua 100% da fase anterior.")
                 perc_fases[fase] = 0.0
             else:
+                if st.button(f"⚡ Marcar todos: {fase}", key=f"btn_op_{fase}"):
+                    for item in METODOLOGIA[fase]: st.session_state[f"op_chk_{fase}_{item}"] = True
+                    st.rerun()
+                    
                 concluidos = 0
                 itens = METODOLOGIA[fase]
                 cols = st.columns(2)
@@ -223,11 +225,9 @@ elif modo == "Dashboard Regional":
                 d['Progresso %'] = round((sum(1 for i in itens if i.entregue) / sum(len(v) for v in METODOLOGIA.values())) * 100, 1)
             else:
                 d['Progresso %'] = 0.0
-            df_list.append(d)
-            
+            df_list.append(d)            
         df = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
-        df_display = df.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
-        
+        df_display = df.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})        
         selecao = st.dataframe(
             df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'data_auditoria']], 
             use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
@@ -235,4 +235,5 @@ elif modo == "Dashboard Regional":
         )
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 

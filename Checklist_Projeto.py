@@ -141,19 +141,14 @@ modo = st.sidebar.radio("Navegação", ["Checklist Operacional", "Dashboard Regi
 
 if modo == "Checklist Operacional":
     st.markdown("<h2 style='color: #143264;'>🏛️ Hub de Inteligência | Operação</h2>", unsafe_allow_html=True)
-    with st.container():
-        c1, c2, c3 = st.columns(3)
-        nome_p = c1.text_input("Nome do Projeto")
-        oportunidade = c2.text_input("CRM")
-        gp_p = c3.text_input("Gerente")
-        c4, c5, c6 = st.columns(3); reg_p = c6.selectbox("Regional", ["Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
-        # ... (demais campos simplificados para brevidade)
+    c1, c2, c3 = st.columns(3)
+    nome_p = c1.text_input("Nome do Projeto")
+    oportunidade = c2.text_input("CRM")
+    gp_p = c3.text_input("Gerente")
 
     fases_lista = list(METODOLOGIA.keys())
-    perc_fases = {}
-    st.markdown("---")
+    perc_fases = {}; checks_ops = {}
     tabs = st.tabs(fases_lista)
-    checks_operacionais = {} # Para salvar o estado detalhado já no primeiro clique
     for i, fase in enumerate(fases_lista):
         with tabs[i]:
             if i > 0 and perc_fases.get(fases_lista[i-1], 0) < 100:
@@ -163,13 +158,13 @@ if modo == "Checklist Operacional":
                 if st.button(f"⚡ Marcar todos: {fase}", key=f"btn_op_{fase}"):
                     for item in METODOLOGIA[fase]: st.session_state[f"op_chk_{fase}_{item}"] = True
                     st.rerun()
-                    
+                
                 concluidos = 0
                 itens = METODOLOGIA[fase]
                 cols = st.columns(2)
                 for idx, item in enumerate(itens):
-                    res = cols[idx % 2].checkbox(item, key=f"op_{fase}_{item}")
-                    checks_operacionais[(fase, item)] = res
+                    res = cols[idx % 2].checkbox(item, key=f"op_chk_{fase}_{item}")
+                    checks_ops[(fase, item)] = res
                     if res: concluidos += 1
                 perc_fases[fase] = (concluidos / len(itens)) * 100
 
@@ -235,5 +230,6 @@ elif modo == "Dashboard Regional":
         )
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 

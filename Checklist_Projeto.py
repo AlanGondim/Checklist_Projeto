@@ -38,6 +38,19 @@ class Projeto(Base):
 
 Base.metadata.create_all(engine)
 
+class AuditoriaHistorico(Base):
+    __tablename__ = 'historico_auditorias'
+    id = Column(Integer, primary_key=True)
+    projeto_id = Column(Integer)
+    nome_projeto = Column(String)
+    data_auditoria = Column(String)
+    responsavel_auditoria = Column(String)
+    progresso_total = Column(Float)
+    fase_atual = Column(String)
+    timestamp = Column(DateTime, default=datetime.now)
+
+Base.metadata.create_all(engine)
+
 # --- METODOLOGIA ---
 METODOLOGIA = {
     "Inicialização": ["Proposta Técnica", "Contrato assinado", "Orçamento Inicial", "Alinhamento time MV", "Ata de reunião", "Alinhamento Cliente", "TAP", "DEP"],
@@ -55,28 +68,70 @@ MAPA_COLUNAS = {
     "Go Live": "go_live", "Operação Assistida": "operacao_assistida", "Finalização": "finalizacao"
 }
 
-# --- FUNÇÃO PARA APRESENTAR ARTEFATOS PENDENTES (CORRIGIDA) ---
-@st.dialog("📋 Artefatos Pendentes por Fase", width="large")
+@st.dialog("📋 Auditoria e Controle de Artefatos", width="large")
 def modal_pendencias(projeto_data):
     st.write(f"### Projeto: {projeto_data['nome_projeto']}")
-    st.write(f"**Gerente:** {projeto_data['gerente_projeto']} | **Regional:** {projeto_data['regional']}")
-    st.markdown("---")
     
-    # Percorre cada fase da metodologia
-    for fase, itens in METODOLOGIA.items():
-        # BUSCA DIRETO PELO NOME DA FASE (pois o DF foi renomeado antes de vir para cá)
-        percentual = projeto_data.get(fase, 0.0)
+    tab1, tab2 = st.tabs(["📝 Nova Auditoria", "History Histórico de Evolução"])
+    
+    with tab1:
+        st.write("**Status Atual da Metodologia**")
+        # Identifica a fase atual (última fase com progresso > 0 e < 100)
+        fase_atual_nome = "Finalizado"
+        for fase in METODOLOGIA.keys():
+            if projeto_data.get(fase, 0) < 100:
+                fase_atual_nome = fase
+                break
         
-        if percentual < 100:
-            with st.expander(f"⚠️ {fase} ({percentual:.0f}% concluído)", expanded=True):
-                st.write("Itens da metodologia para esta fase:")
-                for item in itens:
-                    st.markdown(f"- [ ] {item}")
-        else:
-            st.success(f"✅ {fase}: Todos os artefatos entregues.")
+        c1, c2 = st.columns(2)
+        nova_data = c1.date_input("Data da Nova Auditoria", format="DD/MM/YYYY")
+        novo_resp = c2.text_input("Analista Auditor", value=projeto_data.get('responsavel_auditoria', ''))
 
-    if st.button("Fechar"):
-        st.rerun()
+        st.markdown(f"**Fase em Auditoria:** `{fase_atual_nome}`")
+        
+        # Lista artefatos da fase atual para conferência
+        itens = METODOLOGIA.get(fase_atual_nome, [])
+        for item in itens:
+            st.checkbox(item, key=f"audit_{item}")
+
+        if st.button("💾 Registrar Auditoria e Atualizar Snapshot"):
+            try:
+                # 1. Salva no histórico
+                nova_auditoria = AuditoriaHistorico(
+                    projeto_id=int(projeto_data['id']),
+                    nome_projeto=projeto_data['nome_projeto'],
+                    data_auditoria=str(nova_data),
+                    responsavel_auditoria=novo_resp,
+                    progresso_total=float(projeto_data['Progresso %']),
+                    fase_atual=fase_atual_nome
+                )
+                session.add(nova_auditoria)
+                
+                # 2. Atualiza os dados principais do projeto com a data/responsável da última auditoria
+                proj_db = session.query(Projeto).filter(Projeto.id == int(projeto_data['id'])).first()
+                proj_db.data_auditoria = str(nova_data)
+                proj_db.responsavel_auditoria = novo_resp
+                
+                session.commit()
+                st.success("Auditoria registrada com sucesso!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao salvar: {e}")
+
+    with tab2:
+        st.write("**Linha do Tempo de Auditorias**")
+        historico = session.query(AuditoriaHistorico)\
+            .filter(AuditoriaHistorico.projeto_id == int(projeto_data['id']))\
+            .order_by(desc(AuditoriaHistorico.timestamp)).all()
+        
+        if historico:
+            for h in historico:
+                with st.expander(f"📅 {h.data_auditoria} - Fase: {h.fase_atual}"):
+                    st.write(f"**Responsável:** {h.responsavel_auditoria}")
+                    st.write(f"**Progresso na época:** {h.progresso_total}%")
+                    st.caption(f"Registrado em: {h.timestamp.strftime('%d/%m/%Y %H:%M')}")
+        else:
+            st.info("Nenhuma auditoria anterior registrada para este projeto.")
 
 # --- INTERFACE ---
 st.set_page_config(page_title="Hub de Inteligência MV", layout="wide")
@@ -210,22 +265,24 @@ elif modo == "Dashboard Regional":
             # Preparação do DataFrame Detalhado
             df_detalhe = df_filt.copy()
             df_detalhe = df_detalhe.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
-            
-            colunas_view = ['nome_projeto', 'gerente_projeto', 'regional', 'tipo', 'Progresso %'] + col_fases_reais
-            df_display = df_detalhe[colunas_view].sort_values(by='Progresso %', ascending=False)
 
-            # --- NOVA TABELA INTERATIVA COM SELEÇÃO ---
-            evento_selecao = st.dataframe(
-                df_display,
-                use_container_width=True,
-                hide_index=True,
-                on_select="rerun", # Faz a página reagir ao clique
-                selection_mode="single-row", # Permite selecionar uma linha por vez
-                column_config={
-                    "Progresso %": st.column_config.ProgressColumn("Progresso Total", min_value=0, max_value=100, format="%.1f%%"),
-                    **{fase: st.column_config.NumberColumn(f"{fase} %", format="%.0f%%") for fase in col_fases_reais}
-                }
-            )
+            # Dashboard Regional:
+colunas_view = ['id', 'nome_projeto', 'gerente_projeto', 'regional', 'tipo', 'Progresso %'] + col_fases_reais
+df_display = df_detalhe[colunas_view].sort_values(by='Progresso %', ascending=False)
+
+# Na configuração do st.dataframe, oculte o ID para o usuário não ver
+evento_selecao = st.dataframe(
+    df_display,
+    use_container_width=True,
+    hide_index=True,
+    on_select="rerun",
+    selection_mode="single-row",
+    column_config={
+        "id": None,  # Isso oculta a coluna ID
+        "Progresso %": st.column_config.ProgressColumn("Progresso Total", min_value=0, max_value=100, format="%.1f%%"),
+        **{fase: st.column_config.NumberColumn(f"{fase} %", format="%.0f%%") for fase in col_fases_reais}
+    }
+)
 
             # Lógica para abrir o Popup ao selecionar a linha
             if len(evento_selecao.selection.rows) > 0:
@@ -235,5 +292,6 @@ elif modo == "Dashboard Regional":
                 
                 # Chama a função de popup definida no passo 1
                 modal_pendencias(dados_projeto)
+
 
 

@@ -1,4 +1,5 @@
 import streamlit as st
+import pd as pd
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -40,14 +41,12 @@ class Projeto(Base):
     go_live = Column(Float); operacao_assistida = Column(Float)
     finalizacao = Column(Float)
 
-# Novas tabelas para Auditoria e Rastreabilidade
 class AuditoriaHistorico(Base):
     __tablename__ = 'historico_auditorias'
     id = Column(Integer, primary_key=True)
     projeto_id = Column(Integer)
     data_auditoria = Column(String)
     responsavel = Column(String)
-    status_snapshot = Column(String) # JSON ou String com resumo
     timestamp = Column(DateTime, default=datetime.now)
 
 class Evidencia(Base):
@@ -86,88 +85,73 @@ MAPA_COLUNAS = {
     "Go Live": "go_live", "Operação Assistida": "operacao_assistida", "Finalização": "finalizacao"
 }
 
-# --- FUNÇÕES DE APOIO ---
 def get_status_itens(projeto_id):
     itens = session.query(StatusItem).filter(StatusItem.projeto_id == projeto_id).all()
     return {(i.fase, i.item): bool(i.entregue) for i in itens}
 
-# --- POPUP DE AUDITORIA DE RASTREABILIDADE ---
+# --- POPUP DE AUDITORIA ---
 @st.dialog("📋 Auditoria de Rastreabilidade Integral", width="large")
-def popup_auditoria(projeto):
-    st.write(f"### Projeto: {projeto.nome_projeto} | Regional: {projeto.regional}")
+def popup_auditoria(projeto_data):
+    st.write(f"### Projeto: {projeto_data.nome_projeto}")
     
-    status_db = get_status_itens(projeto.id)
-    tab1, tab2, tab3 = st.tabs(["🔍 Auditoria Técnica", "📜 Histórico de Auditorias", "📂 Evidências (Docs/Prints)"])
+    status_db = get_status_itens(projeto_data.id)
+    tab1, tab2, tab3 = st.tabs(["🔍 Auditoria Técnica", "📜 Histórico", "📂 Evidências"])
     
     with tab1:
-        st.info("Valide os artefatos entregues. Itens marcados anteriormente aparecem com check.")
+        st.info("Valide os artefatos. Itens marcados anteriormente aparecem com check ✅")
         novos_status = {}
         for fase, itens in METODOLOGIA.items():
-            entregues_fase = sum(1 for i in itens if status_db.get((fase, i), False))
-            perc_fase = (entregues_fase / len(itens)) * 100
-            
-            with st.expander(f"Fase: {fase} | Status: {perc_fase:.1f}%"):
+            entregues = sum(1 for i in itens if status_db.get((fase, i), False))
+            perc = (entregues / len(itens)) * 100
+            with st.expander(f"Fase: {fase} | Status: {perc:.1f}%"):
                 for item in itens:
                     val_check = status_db.get((fase, item), False)
-                    novos_status[(fase, item)] = st.checkbox(item, value=val_check, key=f"aud_{projeto.id}_{fase}_{item}")
+                    novos_status[(fase, item)] = st.checkbox(item, value=val_check, key=f"aud_{projeto_data.id}_{fase}_{item}")
         
         st.divider()
         c1, c2 = st.columns(2)
-        auditor = c1.text_input("Analista Auditor MV", key="auditor_nome")
+        auditor = c1.text_input("Analista Auditor MV", key="aud_resp")
         data_aud = c2.date_input("Data da Auditoria Técnica", value=datetime.now())
         
-        if st.button("💾 Consolidar Auditoria e Salvar Rastreabilidade", use_container_width=True):
-            # Salvar itens individuais
-            session.query(StatusItem).filter(StatusItem.projeto_id == projeto.id).delete()
+        if st.button("💾 Consolidar Auditoria", use_container_width=True):
+            session.query(StatusItem).filter(StatusItem.projeto_id == projeto_data.id).delete()
             for (f, i), val in novos_status.items():
-                session.add(StatusItem(projeto_id=projeto.id, fase=f, item=i, entregue=1 if val else 0))
+                session.add(StatusItem(projeto_id=projeto_data.id, fase=f, item=i, entregue=1 if val else 0))
             
-            # Atualizar percentuais na tabela Projeto
-            proj_db = session.query(Projeto).filter(Projeto.id == projeto.id).first()
+            proj_db = session.query(Projeto).filter(Projeto.id == projeto_data.id).first()
             for fase in METODOLOGIA.keys():
                 count = sum(1 for it in METODOLOGIA[fase] if novos_status[(fase, it)])
                 setattr(proj_db, MAPA_COLUNAS[fase], (count / len(METODOLOGIA[fase])) * 100)
             
             proj_db.data_auditoria = str(data_aud)
             proj_db.responsavel_auditoria = auditor
-            
-            # Histórico
-            session.add(AuditoriaHistorico(projeto_id=projeto.id, data_auditoria=str(data_aud), responsavel=auditor))
+            session.add(AuditoriaHistorico(projeto_id=projeto_data.id, data_auditoria=str(data_aud), responsavel=auditor))
             session.commit()
-            st.success("Auditoria Consolidada com Sucesso! Risco jurídico mitigado.")
+            st.success("Auditoria Consolidada!")
             st.rerun()
 
     with tab2:
-        st.write("### Linha do Tempo de Auditorias")
-        historico = session.query(AuditoriaHistorico).filter(AuditoriaHistorico.projeto_id == projeto.id).order_by(desc(AuditoriaHistorico.timestamp)).all()
+        historico = session.query(AuditoriaHistorico).filter(AuditoriaHistorico.projeto_id == projeto_data.id).order_by(desc(AuditoriaHistorico.timestamp)).all()
         if historico:
             for h in historico:
-                st.write(f"📅 **{h.data_auditoria}** - Auditor: `{h.responsavel}` (Registrado em: {h.timestamp.strftime('%d/%m/%Y %H:%M')})")
-        else:
-            st.warning("Nenhuma auditoria anterior registrada para este projeto.")
+                st.write(f"📅 **{h.data_auditoria}** - Auditor: `{h.responsavel}`")
+        else: st.info("Sem histórico.")
 
     with tab3:
-        st.write("### 📎 Depósito de Evidências (Prints de E-mail / Documentos)")
-        fase_ev = st.selectbox("Vincular evidência à fase:", list(METODOLOGIA.keys()))
-        uploaded_file = st.file_uploader("Arraste prints ou documentos aqui", key="file_audit")
-        
+        st.write("### 📎 Depósito de Evidências")
+        fase_ev = st.selectbox("Vincular à fase:", list(METODOLOGIA.keys()))
+        up_file = st.file_uploader("Arraste prints ou documentos", key="file_audit")
         if st.button("📤 Salvar Evidência"):
-            if uploaded_file:
-                caminho = os.path.join("evidencias_audit", f"{projeto.id}_{fase_ev}_{uploaded_file.name}")
-                with open(caminho, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                session.add(Evidencia(projeto_id=projeto.id, fase=fase_ev, nome_arquivo=uploaded_file.name, caminho=caminho))
+            if up_file:
+                caminho = os.path.join("evidencias_audit", f"{projeto_data.id}_{fase_ev}_{up_file.name}")
+                with open(caminho, "wb") as f: f.write(up_file.getbuffer())
+                session.add(Evidencia(projeto_id=projeto_data.id, fase=fase_ev, nome_arquivo=up_file.name, caminho=caminho))
                 session.commit()
-                st.success(f"Evidência para {fase_ev} salva com sucesso!")
-        
+                st.success("Evidência salva!")
         st.divider()
-        st.write("### Arquivos Vinculados")
-        evs = session.query(Evidencia).filter(Evidencia.projeto_id == projeto.id).all()
+        evs = session.query(Evidencia).filter(Evidencia.projeto_id == projeto_data.id).all()
         for ev in evs:
-            col_a, col_b = st.columns([0.8, 0.2])
-            col_a.write(f"📄 **{ev.fase}**: {ev.nome_arquivo}")
-            with open(ev.caminho, "rb") as f:
-                col_b.download_button("Baixar", f, file_name=ev.nome_arquivo, key=f"dl_{ev.id}")
+            st.write(f"📄 **{ev.fase}**: {ev.nome_arquivo}")
 
 # --- INTERFACE ---
 st.set_page_config(page_title="Hub de Inteligência MV", layout="wide")
@@ -205,7 +189,7 @@ if modo == "Checklist Operacional":
     for i, fase in enumerate(fases_lista):
         with tabs[i]:
             if i > 0 and perc_fases.get(fases_lista[i-1], 0) < 100:
-                st.error(f"🚨 FASE BLOQUEADA: Conclua 100% da fase anterior para liberar '{fase}'.")
+                st.error(f"🚨 FASE BLOQUEADA: Conclua 100% da fase anterior.")
                 perc_fases[fase] = 0.0
             else:
                 concluidos = 0
@@ -216,12 +200,8 @@ if modo == "Checklist Operacional":
                         concluidos += 1
                 perc_fases[fase] = (concluidos / len(itens)) * 100
 
-    # --- RENDERIZAÇÃO SPARKLINE ---
     st.markdown("<h3 style='font-size: 18px; color: #143264;'>🛤️ Linha do Tempo da Metodologia</h3>", unsafe_allow_html=True)
     
-
-[Image of Gantt chart showing project phases]
-
     st.markdown("""
         <style>
         .timeline-wrapper { position: relative; margin-bottom: 40px; padding-top: 10px; }
@@ -253,7 +233,6 @@ if modo == "Checklist Operacional":
     if st.button("💾 SALVAR NO HUB", use_container_width=True):
         if nome_p and gp_p:
             try:
-                # Ao salvar no HUB, também inicializamos o status detalhado se for novo
                 novo = Projeto(
                     nome_projeto=nome_p, gerente_projeto=gp_p, regional=reg_p, oportunidade=oportunidade,
                     horas_contratadas=horas_cont, tipo=tipo_p, data_inicio=str(d_inicio),
@@ -276,12 +255,10 @@ elif modo == "Dashboard Regional":
         df['regional'] = df['regional'].fillna("N/D")
         df['gerente_projeto'] = df['gerente_projeto'].fillna("Sem Nome")
         
-        # Mapeamento para exibição
         col_fases_db = list(MAPA_COLUNAS.values())
         col_fases_reais = list(MAPA_COLUNAS.keys())
         df['Progresso %'] = df[col_fases_db].mean(axis=1).round(1)
 
-        # --- FILTROS SIDEBAR ---
         st.sidebar.header("🎯 Filtros")
         gerentes_list = sorted(df['gerente_projeto'].unique())
         f_gp = st.sidebar.multiselect("Filtrar por Gerente", gerentes_list, default=gerentes_list)
@@ -291,40 +268,30 @@ elif modo == "Dashboard Regional":
         df_filt = df[(df['gerente_projeto'].isin(f_gp)) & (df['regional'].isin(f_reg))]
 
         if not df_filt.empty:
-            # --- RESUMO POR GERENTE ---
             st.markdown("### 🏆 Performance Média por Gerente")
             df_gerente = df_filt.groupby('gerente_projeto').agg({'Progresso %': 'mean', 'nome_projeto': 'count'}).reset_index()
             df_gerente.columns = ['Gerente', 'Média de Entrega %', 'Qtd Projetos']
             st.dataframe(df_gerente.sort_values('Média de Entrega %', ascending=False), use_container_width=True, hide_index=True,
                          column_config={"Média de Entrega %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%")})
 
-            # --- TABELA COMPLETA INTERATIVA ---
             st.markdown("---")
             st.markdown("### 🔎 Detalhamento Completo da Carteira")
-            st.info("💡 **Ação**: Selecione um projeto na tabela abaixo para abrir o painel de Auditoria de Rastreabilidade.")
+            st.info("💡 **Ação**: Selecione um projeto na tabela abaixo para abrir a **Auditoria de Rastreabilidade**.")
             
-            # Preparação do DataFrame Detalhado
             df_detalhe = df_filt.copy()
             df_detalhe = df_detalhe.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
-            
-            # Seleção e Ordenação das Colunas (incluindo ID oculto para busca)
             colunas_view = ['id', 'nome_projeto', 'gerente_projeto', 'regional', 'Progresso %'] + col_fases_reais
             
-            # Tabela com seleção de linha
             selecao = st.dataframe(
                 df_detalhe[colunas_view].sort_values(by='Progresso %', ascending=False),
-                use_container_width=True,
-                hide_index=True,
-                on_select="rerun",
-                selection_mode="single-row",
+                use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
                 column_config={
-                    "id": None, # Oculta o ID
+                    "id": None,
                     "Progresso %": st.column_config.ProgressColumn("Progresso Total", min_value=0, max_value=100, format="%.1f%%"),
                     **{fase: st.column_config.NumberColumn(f"{fase} %", format="%.0f%%") for fase in col_fases_reais}
                 }
             )
 
-            # Lógica do Popup
             if len(selecao["selection"]["rows"]) > 0:
                 row_idx = selecao["selection"]["rows"][0]
                 projeto_id = df_detalhe.iloc[row_idx]['id']
@@ -332,5 +299,5 @@ elif modo == "Dashboard Regional":
                 if projeto_obj:
                     popup_auditoria(projeto_obj)
                     
-        else: st.warning("Nenhum projeto encontrado para os filtros selecionados.")
+        else: st.warning("Nenhum projeto encontrado.")
     else: st.info("Nenhum projeto registrado.")

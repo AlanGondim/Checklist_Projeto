@@ -78,140 +78,141 @@ def get_status_itens(projeto_id):
 @st.dialog("📋 Auditoria de Rastreabilidade Integral", width="large")
 def popup_auditoria(projeto_id):
     proj = session.query(Projeto).filter(Projeto.id == projeto_id).first()
-    itens_salvos = session.query(StatusItem).filter(StatusItem.projeto_id == projeto_id).all()
-    status_map = {(i.fase, i.item): bool(i.entregue) for i in itens_salvos}
+    
+    # Inicializa o estado dos itens se for a primeira vez no popup nesta sessão
+    if f"temp_status_{projeto_id}" not in st.session_state:
+        st.session_state[f"temp_status_{projeto_id}"] = get_status_itens(proj.id)
     
     st.write(f"### Projeto: {proj.nome_projeto}")
     tab1, tab2, tab3 = st.tabs(["🔍 Auditoria Técnica", "📜 Histórico", "📂 Evidências"])
     
     with tab1:
-        novos_status = {}; total_e = 0; total_i = 0
+        total_e = 0; total_i = 0
         for fase, itens in METODOLOGIA.items():
-            f_concluidos = sum(1 for i in itens if status_map.get((fase, i), False))
-            f_perc = (f_concluidos / len(itens)) * 100
+            fase_status = [st.session_state[f"temp_status_{projeto_id}"].get((fase, i), False) for i in itens]
+            f_perc = (sum(fase_status) / len(itens)) * 100
             
             with st.expander(f"{fase} - {f_perc:.0f}% Validado", expanded=(f_perc < 100)):
-                # INCREMENTO: Atualização em massa por fase (Auditoria)
-                if st.button(f"✅ Marcar Conformidade Total: {fase}", key=f"btn_aud_all_{fase}"):
-                    for item in itens: status_map[(fase, item)] = True
+                # BOTÃO DE CONFORMIDADE TOTAL DA FASE (CORRIGIDO)
+                if st.button(f"✅ Validar conformidade total: {fase}", key=f"btn_all_{fase}"):
+                    for item in itens:
+                        st.session_state[f"temp_status_{projeto_id}"][(fase, item)] = True
                     st.rerun()
 
                 st.progress(f_perc / 100)
                 for item in itens:
-                    val_db = status_map.get((fase, item), False)
-                    res = st.checkbox(item, value=val_db, key=f"aud_{proj.id}_{fase}_{item}")
-                    novos_status[(fase, item)] = res
+                    is_checked = st.session_state[f"temp_status_{projeto_id}"].get((fase, item), False)
+                    res = st.checkbox(item, value=is_checked, key=f"chk_{proj.id}_{fase}_{item}")
+                    st.session_state[f"temp_status_{projeto_id}"][(fase, item)] = res
                     if res: total_e += 1
                     total_i += 1
         
-        p_medio = (total_e / total_i) * 100
-        if p_medio == 100:
-            st.success("🌟 **PROJETO EM CONFORMIDADE INTEGRAL!**")
-            st.balloons()
-        
+        prog_atual = (total_e / total_i) * 100
+        if prog_atual == 100: st.success("🌟 CONFORMIDADE INTEGRAL!"); st.balloons()
+
         st.divider()
-        c1, c2 = st.columns(2)
-        aud = c1.text_input("Analista Auditor MV", value=proj.responsavel_auditoria or "")
-        data_aud = c2.date_input("Data da Auditoria", value=datetime.now())
-        
-        if st.button("🚀 CONSOLIDAR AUDITORIA", use_container_width=True):
+        auditor = st.text_input("Analista Auditor MV", value=proj.responsavel_auditoria or "")
+        if st.button("💾 CONSOLIDAR SNAPSHOT JURÍDICO", use_container_width=True):
             session.query(StatusItem).filter(StatusItem.projeto_id == proj.id).delete()
-            for (f, i), v in novos_status.items():
+            for (f, i), v in st.session_state[f"temp_status_{projeto_id}"].items():
                 session.add(StatusItem(projeto_id=proj.id, fase=f, item=i, entregue=1 if v else 0))
             for fase in METODOLOGIA.keys():
-                count = sum(1 for it in METODOLOGIA[fase] if novos_status.get((fase, it)))
+                count = sum(1 for it in METODOLOGIA[fase] if st.session_state[f"temp_status_{projeto_id}"].get((fase, it)))
                 setattr(proj, MAPA_COLUNAS[f], (count / len(METODOLOGIA[fase])) * 100)
-            proj.responsavel_auditoria = aud
-            session.add(AuditoriaHistorico(projeto_id=proj.id, data_auditoria=str(data_aud), responsavel=aud, progresso_total=p_medio))
-            session.commit(); st.success("Auditoria Atualizada!"); st.rerun()
+            proj.responsavel_auditoria = auditor
+            session.add(AuditoriaHistorico(projeto_id=proj.id, data_auditoria=str(datetime.now().date()), responsavel=auditor, progresso_total=prog_atual))
+            session.commit(); del st.session_state[f"temp_status_{projeto_id}"]; st.rerun()
 
     with tab2:
         hist = session.query(AuditoriaHistorico).filter(AuditoriaHistorico.projeto_id == proj.id).order_by(desc(AuditoriaHistorico.timestamp)).all()
-        if hist:
-            df_hist = pd.DataFrame([{"Data": h.data_auditoria, "Auditor": h.responsavel, "Performance": f"{h.progresso_total:.1f}%"} for h in hist])
-            st.table(df_hist)
+        for h in hist: st.write(f"📅 **{h.data_auditoria}**: {h.progresso_total:.1f}% (Auditor: {h.responsavel})")
 
     with tab3:
         f_ev = st.selectbox("Fase:", list(METODOLOGIA.keys()))
-        up = st.file_uploader("Anexar Evidência", key="up_audit")
-        if st.button("Salvar Arquivo"):
+        up = st.file_uploader("Upload")
+        if st.button("Salvar Evidência"):
             if up:
-                path = f"evidencias_audit/{proj.id}_{f_ev}_{up.name}"
+                path = f"evidencias_audit/{proj.id}_{up.name}"
                 with open(path, "wb") as f: f.write(up.getbuffer())
                 session.add(Evidencia(projeto_id=proj.id, fase=f_ev, nome_arquivo=up.name, caminho=path))
-                session.commit(); st.success("Arquivo Salvo!")
+                session.commit(); st.success("Salvo!")
 
-# --- INTERFACE PRINCIPAL ---
+# --- INTERFACE ---
 st.set_page_config(page_title="Hub de Inteligência MV", layout="wide")
 modo = st.sidebar.radio("Navegação", ["Checklist Operacional", "Dashboard Regional"])
 
 if modo == "Checklist Operacional":
     st.markdown("<h2 style='color: #143264;'>🏛️ Hub de Inteligência | Operação</h2>", unsafe_allow_html=True)
-    with st.container():
-        c1, c2, c3 = st.columns(3)
-        nome_p = c1.text_input("Nome do Projeto")
-        oportunidade = c2.text_input("CRM")
-        gp_p = c3.text_input("Gerente")
-        c4, c5, c6 = st.columns(3); reg_p = c6.selectbox("Regional", ["Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
+    c1, c2, c3 = st.columns(3)
+    nome_p = c1.text_input("Nome do Projeto")
+    oportunidade = c2.text_input("CRM")
+    gp_p = c3.text_input("Gerente")
 
     fases_lista = list(METODOLOGIA.keys())
-    perc_fases = {}
-    st.markdown("---")
+    perc_fases = {}; checks_ops = {}
     tabs = st.tabs(fases_lista)
-    checks_operacionais = {}
-
     for i, fase in enumerate(fases_lista):
         with tabs[i]:
             if i > 0 and perc_fases.get(fases_lista[i-1], 0) < 100:
                 st.error(f"🚨 FASE BLOQUEADA: Conclua 100% da fase anterior.")
                 perc_fases[fase] = 0.0
             else:
-                # INCREMENTO: Atualização em massa por fase (Operacional)
-                if st.button(f"⚡ Marcar todos os itens: {fase}", key=f"btn_op_all_{fase}"):
-                    for item in METODOLOGIA[fase]: st.session_state[f"chk_op_{fase}_{item}"] = True
-
+                if st.button(f"⚡ Marcar todos: {fase}", key=f"btn_op_{fase}"):
+                    for item in METODOLOGIA[fase]: st.session_state[f"op_chk_{fase}_{item}"] = True
+                    st.rerun()
+                
                 concluidos = 0
                 itens = METODOLOGIA[fase]
                 cols = st.columns(2)
                 for idx, item in enumerate(itens):
-                    res = cols[idx % 2].checkbox(item, key=f"chk_op_{fase}_{item}")
-                    checks_operacionais[(fase, item)] = res
+                    res = cols[idx % 2].checkbox(item, key=f"op_chk_{fase}_{item}")
+                    checks_ops[(fase, item)] = res
                     if res: concluidos += 1
                 perc_fases[fase] = (concluidos / len(itens)) * 100
 
-    # SPARKLINE COMPLETO
+    # SPARKLINE (CONEXÃO AZUL MARINHO + BORDAS CONDICIONAIS)
     st.markdown("<h3 style='font-size: 18px; color: #143264;'>🛤️ Linha do Tempo da Metodologia</h3>", unsafe_allow_html=True)
-    st.markdown("""<style>.timeline-wrapper { position: relative; margin-bottom: 40px; padding-top: 10px; display: flex; justify-content: space-between; align-items: center; } .timeline-line { position: absolute; top: 38px; left: 5%; right: 5%; height: 3px; background-color: #143264; z-index: 1; } .pie-circle { width: 45px; height: 45px; border-radius: 50%; display: inline-block; position: relative; z-index: 2; background-color: white; }</style>""", unsafe_allow_html=True)
-    st.markdown("<div class='timeline-wrapper'><div class='timeline-line'></div>", unsafe_allow_html=True)
-    cols_visual = st.columns(len(fases_lista))
+    st.markdown("""
+        <style>
+        .timeline-container { display: flex; align-items: center; position: relative; padding: 20px 0; width: 100%; justify-content: space-between; }
+        .timeline-line { position: absolute; top: 50%; left: 5%; right: 5%; height: 3px; background-color: #143264; z-index: 0; transform: translateY(-50%); }
+        .step-container { position: relative; z-index: 1; background: white; text-align: center; flex: 1; }
+        .pie-circle { width: 45px; height: 45px; border-radius: 50%; margin: 0 auto; display: flex; align-items: center; justify-content: center; }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("<div class='timeline-container'><div class='timeline-line'></div>", unsafe_allow_html=True)
+    cols_v = st.columns(len(fases_lista))
     for i, fase in enumerate(fases_lista):
-        valor = perc_fases[fase]
-        cor_borda = "#143264" if valor > 0 else "#FFD700"
-        with cols_visual[i]:
-            st.markdown(f"<div style='text-align: center; position: relative; z-index: 2;'><div class='pie-circle' style='background: conic-gradient(#143264 {valor}%, #E0E0E0 0); border: 4px solid {cor_borda};'></div><p style='font-size: 11px; font-weight: bold;'>{fase}</p></div>", unsafe_allow_html=True)
+        v = perc_fases[fase]
+        cor_b = "#143264" if v > 0 else "#FFD700"
+        with cols_v[i]:
+            st.markdown(f"""
+                <div style='text-align: center; position: relative;'>
+                    <div class='pie-circle' style='background: conic-gradient(#143264 {v}%, #E0E0E0 0); border: 4px solid {cor_b};'></div>
+                    <p style='font-size: 11px; font-weight: bold; color: #143264; margin-top: 5px;'>{fase}</p>
+                </div>
+            """, unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
     if st.button("💾 SALVAR NO HUB", use_container_width=True):
-        if nome_p and gp_p:
-            novo = Projeto(nome_projeto=nome_p, gerente_projeto=gp_p, regional=reg_p, **{MAPA_COLUNAS[f]: v for f, v in perc_fases.items()})
-            session.add(novo); session.flush()
-            for (f, i), v in checks_operacionais.items():
-                session.add(StatusItem(projeto_id=novo.id, fase=f, item=i, entregue=1 if v else 0))
-            session.commit(); st.success("Salvo com sucesso!")
+        novo = Projeto(nome_projeto=nome_p, gerente_projeto=gp_p, oportunidade=oportunidade, **{MAPA_COLUNAS[f]: v for f, v in perc_fases.items()})
+        session.add(novo); session.flush()
+        for (f, i), v in checks_ops.items(): session.add(StatusItem(projeto_id=novo.id, fase=f, item=i, entregue=1 if v else 0))
+        session.commit(); st.success("Salvo!"); st.rerun()
 
 elif modo == "Dashboard Regional":
-    st.markdown("<h2 style='color: #143264;'>📊 Dashboard de Governança</h2>", unsafe_allow_html=True)
-    projs = session.query(Projeto).all()
-    if projs:
+    st.markdown("<h2 style='color: #143264;'>📊 Dashboard Regional</h2>", unsafe_allow_html=True)
+    query = session.query(Projeto).all()
+    if query:
         df_list = []
-        for p in projs:
+        for p in query:
             d = vars(p).copy()
             itens = session.query(StatusItem).filter(StatusItem.projeto_id == p.id).all()
-            total_m = sum(len(v) for v in METODOLOGIA.values())
             entregues = sum(1 for i in itens if i.entregue)
-            d['Progresso %'] = round((entregues / total_m) * 100, 1) if total_m > 0 else 0.0
+            d['Progresso %'] = round((entregues / sum(len(v) for v in METODOLOGIA.values())) * 100, 1) if entregues > 0 else 0.0
             df_list.append(d)
         df_display = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
-        selecao = st.dataframe(df_display[['id', 'nome_projeto', 'gerente_projeto', 'regional', 'Progresso %', 'data_auditoria']], use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row", column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%")})
-        if len(selecao.selection.rows) > 0:
-            popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+        sel = st.dataframe(df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %']], use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row", column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(format="%.1f%%")})
+        if len(sel.selection.rows) > 0:
+            popup_auditoria(int(df_display.iloc[sel.selection.rows[0]]['id']))

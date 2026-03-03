@@ -55,7 +55,7 @@ MAPA_COLUNAS = {
     "Go Live": "go_live", "Operação Assistida": "operacao_assistida", "Finalização": "finalizacao"
 }
 
-# --- FUNÇÃO PARA APRESENTAR ARTEFATOS PENDENTES (POPUP) ---
+# --- FUNÇÃO PARA APRESENTAR ARTEFATOS PENDENTES (CORRIGIDA) ---
 @st.dialog("📋 Artefatos Pendentes por Fase", width="large")
 def modal_pendencias(projeto_data):
     st.write(f"### Projeto: {projeto_data['nome_projeto']}")
@@ -64,17 +64,13 @@ def modal_pendencias(projeto_data):
     
     # Percorre cada fase da metodologia
     for fase, itens in METODOLOGIA.items():
-        # Busca o percentual concluído desta fase no projeto selecionado
-        col_db = MAPA_COLUNAS[fase]
-        percentual = projeto_data[col_db]
+        # BUSCA DIRETO PELO NOME DA FASE (pois o DF foi renomeado antes de vir para cá)
+        percentual = projeto_data.get(fase, 0.0)
         
         if percentual < 100:
             with st.expander(f"⚠️ {fase} ({percentual:.0f}% concluído)", expanded=True):
-                # Como o seu banco atual guarda apenas o %, aqui listamos todos os itens
-                # Em uma melhoria futura, você pode salvar item por item no DB
-                st.write("Verifique os itens pendentes para esta fase:")
+                st.write("Itens da metodologia para esta fase:")
                 for item in itens:
-                    # Simulação visual de check (você pode adaptar conforme sua necessidade)
                     st.markdown(f"- [ ] {item}")
         else:
             st.success(f"✅ {fase}: Todos os artefatos entregues.")
@@ -239,4 +235,5 @@ elif modo == "Dashboard Regional":
                 
                 # Chama a função de popup definida no passo 1
                 modal_pendencias(dados_projeto)
+
 

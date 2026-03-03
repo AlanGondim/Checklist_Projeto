@@ -117,47 +117,58 @@ def modal_auditoria(projeto_data):
     projeto_id = int(projeto_data['id'])
     st.write(f"### Projeto: {projeto_data['nome_projeto']}")
     
+    # Busca o estado real de cada artefato no banco de dados
     status_atual = get_status_itens(projeto_id)
     novos_status = {}
+
     tab1, tab2, tab3 = st.tabs(["📝 Auditoria Técnica", "📜 Histórico", "📂 Evidências"])
 
     with tab1:
-        st.info("Valide os artefatos. Itens marcados anteriormente são preservados para rastreabilidade.")
+        st.subheader("Checklist de Conformidade")
+        st.info("Artefatos com check ✅ foram validados em auditorias anteriores.")
+        
+        # Iteração por fases para garantir rastreabilidade total
         for fase, itens in METODOLOGIA.items():
-            with st.expander(f"Fase: {fase}"):
+            # Cálculo de percentual da fase em tempo real para o cabeçalho do expander
+            itens_fase_concluidos = sum(1 for it in itens if status_atual.get((fase, it), False))
+            perc_fase_atual = (itens_fase_concluidos / len(itens)) * 100
+            
+            expander_label = f"Fase: {fase} | Entregue: {perc_fase_atual:.0f}%"
+            
+            with st.expander(expander_label, expanded=(perc_fase_atual < 100)):
+                # Barra de progresso visual para a fase
+                st.progress(perc_fase_atual / 100)
+                
                 for item in itens:
-                    c1, c2 = st.columns([0.5, 0.5])
-                    v_prev = status_atual.get((fase, item), False)
-                    res = c1.checkbox(item, value=v_prev, key=f"p_{projeto_id}_{fase}_{item}")
+                    c1, c2 = st.columns([0.6, 0.4])
+                    
+                    # RASTREABILIDADE: O valor padrão vem do que está no banco (status_atual)
+                    foi_entregue = status_atual.get((fase, item), False)
+                    
+                    # Renderiza o checkbox. Se foi_entregue for True, ele já aparece com FLAG.
+                    res = c1.checkbox(
+                        label=f"{item}", 
+                        value=foi_entregue, 
+                        key=f"audit_check_{projeto_id}_{fase}_{item}"
+                    )
                     novos_status[(fase, item)] = res
-                    if res:
-                        arquivo = c2.file_uploader("Anexar Prova", key=f"f_{projeto_id}_{fase}_{item}", label_visibility="collapsed")
-                        if arquivo:
-                            path = os.path.join("attachments", f"{projeto_id}_{fase}_{arquivo.name}")
-                            with open(path, "wb") as f: f.write(arquivo.getbuffer())
-                            session.add(EvidenciaArtefato(projeto_id=projeto_id, fase=fase, item_nome=item, arquivo_nome=arquivo.name, arquivo_path=path))
-                            st.toast(f"Evidência salva: {item}")
+                    
+                    if res and not foi_entregue:
+                        c2.caption("✨ *Novo item identificado nesta auditoria*")
+                    elif foi_entregue:
+                        c2.caption("✅ *Item já rastreado anteriormente*")
 
         st.divider()
+        # Campos de validação da auditoria atual
         c1, c2 = st.columns(2)
-        d_aud = c1.date_input("Data da Auditoria", format="DD/MM/YYYY")
-        r_aud = c2.text_input("Auditor Responsável", value=projeto_data.get('responsavel_auditoria', ''))
+        d_aud = c1.date_input("Data da Auditoria Técnica", format="DD/MM/YYYY")
+        r_aud = c2.text_input("Analista Responsável", value=projeto_data.get('responsavel_auditoria', ''))
 
-        if st.button("💾 Finalizar Auditoria e Salvar Evolução", use_container_width=True):
+        if st.button("🚀 Consolidar Auditoria e Salvar Rastreabilidade", use_container_width=True):
+            # Chamada para a função que salva os estados individuais e o snapshot
             salvar_auditoria_completa(projeto_data, novos_status, d_aud, r_aud)
-            st.success("Snapshot de auditoria salvo com sucesso!"); st.rerun()
-
-    with tab2:
-        hist = session.query(AuditoriaHistorico).filter(AuditoriaHistorico.projeto_id == projeto_id).order_by(desc(AuditoriaHistorico.timestamp)).all()
-        for h in hist:
-            with st.expander(f"📅 Auditoria em {h.data_auditoria} - {h.progresso_total:.1f}%"):
-                st.write(f"**Analista:** {h.responsavel_auditoria}")
-
-    with tab3:
-        evidencias = session.query(EvidenciaArtefato).filter(EvidenciaArtefato.projeto_id == projeto_id).all()
-        for ev in evidencias:
-            with open(ev.arquivo_path, "rb") as f:
-                st.download_button(f"⬇️ {ev.item_nome} ({ev.arquivo_nome})", f, file_name=ev.arquivo_nome, key=f"dl_{ev.id}")
+            st.success("Auditoria consolidada. O histórico de artefatos foi atualizado para fins jurídicos.")
+            st.rerun()
 
 # =========================================================
 # 5. EXECUÇÃO DA INTERFACE
@@ -192,3 +203,4 @@ elif modo == "Dashboard Regional":
 
         if len(event.selection.rows) > 0:
             modal_auditoria(df_display.iloc[event.selection.rows[0]])
+

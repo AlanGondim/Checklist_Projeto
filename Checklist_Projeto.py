@@ -83,6 +83,93 @@ MAPA_COLUNAS = {
     "Go Live": "go_live", "Operação Assistida": "operacao_assistida", "Finalização": "finalizacao"
 }
 
+# --- LOGICA DE AUDITORIA ---
+@st.dialog("📋 Rastreabilidade e Auditoria Integral", width="large")
+def popup_auditoria(projeto_id):
+    proj = session.query(Projeto).filter(Projeto.id == projeto_id).first()
+    itens_db = session.query(StatusItem).filter(StatusItem.projeto_id == projeto_id).all()
+    status_map = {(i.fase, i.item): bool(i.entregue) for i in itens_db}
+    
+    st.subheader(f"Auditoria: {proj.nome_projeto}")
+    t1, t2, t3 = st.tabs(["🔍 Auditoria Técnica (Gaps)", "📜 Histórico de Evolução", "📂 Evidências e Prints"])
+
+    with t1:
+        st.markdown("### Check de Entregáveis")
+        filtro_pendencia = st.toggle("Exibir apenas pendências (Gaps)", value=False)
+        novos_status = {}
+        total_entregue = 0
+        total_geral = 0
+
+        for fase, itens in METODOLOGIA.items():
+            entregues_fase = sum(1 for i in itens if status_map.get((fase, i), False))
+            perc = (entregues_fase / len(itens)) * 100
+            
+            with st.expander(f"{fase} - Status: {perc:.0f}%", expanded=(perc < 100)):
+                for item in itens:
+                    atualmente_entregue = status_map.get((fase, item), False)
+                    if filtro_pendencia and atualmente_entregue:
+                        novos_status[(fase, item)] = True # Mantém se estiver filtrado
+                        continue 
+                    
+                    res = st.checkbox(f"{'✅' if atualmente_entregue else '❌'} {item}", value=atualmente_entregue, key=f"pop_{proj.id}_{fase}_{item}")
+                    novos_status[(fase, item)] = res
+                    if res: total_entregue += 1
+                    total_geral += 1
+
+        st.divider()
+        auditor = st.text_input("Nome do Auditor", value=proj.responsavel_auditoria if proj.responsavel_auditoria else "")
+        if st.button("CONSOLIDAR AUDITORIA (SALVAR SNAPSHOT)", use_container_width=True):
+            session.query(StatusItem).filter(StatusItem.projeto_id == proj.id).delete()
+            for (f, i), val in novos_status.items():
+                session.add(StatusItem(projeto_id=proj.id, fase=f, item=i, entregue=1 if val else 0))
+            
+            prog_total = (total_entregue / total_geral) * 100
+            session.add(AuditoriaHistorico(projeto_id=proj.id, data_auditoria=str(datetime.now().date()), responsavel=auditor, progresso_total=prog_total))
+            
+            # Atualiza Projeto
+            for f in METODOLOGIA.keys():
+                c = sum(1 for it in METODOLOGIA[f] if novos_status.get((f, it)))
+                setattr(proj, MAPA_COLUNAS[f], (c / len(METODOLOGIA[f])) * 100)
+            proj.responsavel_auditoria = auditor
+            session.commit()
+            st.success("Auditoria salva com sucesso!"); st.rerun()
+
+    with t2:
+        st.markdown("### Histórico de Auditorias Realizadas")
+        hist = session.query(AuditoriaHistorico).filter(AuditoriaHistorico.projeto_id == proj.id).order_by(desc(AuditoriaHistorico.timestamp)).all()
+        if hist:
+            df_h = pd.DataFrame([{
+                "Data": h.data_auditoria,
+                "Auditor": h.responsavel,
+                "Progresso na Data": f"{h.progresso_total:.1f}%",
+                "Registro Sistema": h.timestamp.strftime("%d/%m/%Y %H:%M")
+            } for h in hist])
+            st.table(df_h)
+        else: st.info("Nenhuma auditoria registrada anteriormente.")
+
+    with t3:
+        st.markdown("### Repositório de Provas e Evidências")
+        col_up, col_list = st.columns([1, 1])
+        with col_up:
+            fase_ev = st.selectbox("Fase do anexo", list(METODOLOGIA.keys()))
+            file = st.file_uploader("Upload de Print de E-mail / PDF", type=['png', 'jpg', 'pdf'])
+            if st.button("Anexar Evidência"):
+                if file:
+                    path = f"evidencias_audit/{proj.id}_{fase_ev}_{file.name}"
+                    with open(path, "wb") as f: f.write(file.getbuffer())
+                    session.add(Evidencia(projeto_id=proj.id, fase=fase_ev, nome_arquivo=file.name, caminho=path))
+                    session.commit(); st.success("Arquivo anexado!")
+        
+        with col_list:
+            st.write("**Arquivos Anexados:**")
+            evidencias = session.query(Evidencia).filter(Evidencia.projeto_id == proj.id).all()
+            for ev in evidencias:
+                with st.expander(f"📄 {ev.fase}: {ev.nome_arquivo}"):
+                    if ev.nome_arquivo.lower().endswith(('png', 'jpg', 'jpeg')):
+                        st.image(ev.caminho)
+                    with open(ev.caminho, "rb") as f:
+                        st.download_button("Baixar Arquivo", f, file_name=ev.nome_arquivo, key=f"dl_{ev.id}")
+
 def get_status_itens(projeto_id):
     itens = session.query(StatusItem).filter(StatusItem.projeto_id == projeto_id).all()
     return {(i.fase, i.item): bool(i.entregue) for i in itens}
@@ -164,8 +251,27 @@ def popup_auditoria(projeto_id):
                 st.download_button(f"⬇️ {ev.fase}: {ev.nome_arquivo}", f, file_name=ev.nome_arquivo, key=f"dl_{ev.id}")
 
 # --- INTERFACE ---
-st.set_page_config(page_title="Hub de Inteligência MV", layout="wide")
-modo = st.sidebar.radio("Navegação", ["Checklist Operacional", "Dashboard Regional"])
+st.set_page_config(page_title="Hub MV", layout="wide")
+modo = st.sidebar.radio("Menu", ["Checklist Operacional", "Dashboard Regional"])
+
+if modo == "Dashboard Regional":
+    st.title("📊 Dashboard Regional")
+    projs = session.query(Projeto).all()
+    if projs:
+        df = pd.DataFrame([vars(p) for p in projs]).drop_duplicates(subset=['nome_projeto'], keep='first')
+        df['Progresso %'] = df[list(MAPA_COLUNAS.values())].mean(axis=1).round(1)
+        
+        st.info("💡 Clique em uma linha para auditar entregas e documentos.")
+        sel = st.dataframe(df[['id', 'nome_projeto', 'gerente_projeto', 'regional', 'Progresso %']], 
+                           use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
+                           column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%")})
+        
+        if len(sel["selection"]["rows"]) > 0:
+            idx = sel["selection"]["rows"][0]
+            popup_auditoria(int(df.iloc[idx]['id']))
+    else: st.warning("Sem projetos.")
+else:
+    st.write("Aba Checklist Operacional (Original mantida conforme solicitado)")
 
 if modo == "Checklist Operacional":
     st.markdown("<h2 style='font-size: 24px; color: #143264; font-weight: bold;'>🏛️ Hub de Inteligência | Operação</h2>", unsafe_allow_html=True)
@@ -263,3 +369,4 @@ elif modo == "Dashboard Regional":
                     
         else: st.warning("Nenhum projeto encontrado.")
     else: st.info("Nenhum projeto registrado no sistema.")
+

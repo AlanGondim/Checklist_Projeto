@@ -70,6 +70,10 @@ MAPA_COLUNAS = {
     "Go Live": "go_live", "Operação Assistida": "operacao_assistida", "Finalização": "finalizacao"
 }
 
+def get_status_itens(projeto_id):
+    itens = session.query(StatusItem).filter(StatusItem.projeto_id == projeto_id).all()
+    return {(i.fase, i.item): bool(i.entregue) for i in itens}
+
 # --- POPUP DE AUDITORIA ---
 @st.dialog("📋 Auditoria de Rastreabilidade Integral", width="large")
 def popup_auditoria(projeto_id):
@@ -140,116 +144,97 @@ def popup_auditoria(projeto_id):
                 session.add(Evidencia(projeto_id=proj.id, fase=f_ev, nome_arquivo=up.name, caminho=path))
                 session.commit(); st.success("Salvo!")
 
-# --- INTERFACE PRINCIPAL ---
-if modo := st.sidebar.radio("Navegação", ["Checklist Operacional", "Dashboard Regional"]):
+# --- INTERFACE ---
+st.set_page_config(page_title="Hub de Inteligência MV", layout="wide")
+modo = st.sidebar.radio("Navegação", ["Checklist Operacional", "Dashboard Regional"])
 
-    if modo == "Checklist Operacional":
-        st.markdown("<h2 style='color: #143264;'>🏛️ Hub de Inteligência | Operação</h2>", unsafe_allow_html=True)
-        with st.container():
-            col1, col2, col3 = st.columns(3)
-            nome_p = col1.text_input("Nome do Projeto")
-            oportunidade = col2.text_input("Oportunidade (CRM)")
-            gp_p = col3.text_input("Gerente do Projeto")
-            regional_p = col1.selectbox("Regional", ["Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
-            horas_cont = col2.number_input("Horas Contratadas", min_value=0.0)
-            d_inicio = col3.date_input("Data de Início", format="DD/MM/YYYY")
-            d_termino = col1.date_input("Data de Término", format="DD/MM/YYYY")
-            d_producao = col2.date_input("Data de Entrada em Produção", format="DD/MM/YYYY")
-            d_auditoria_cad = col3.date_input("Data da Auditoria", format="DD/MM/YYYY")
-            resp_auditoria_cad = col1.text_input("Responsável pela Auditoria")
-
-        fases_lista = list(METODOLOGIA.keys())
-        perc_fases = {}
-        st.markdown("---")
-        tabs = st.tabs(fases_lista)
-        checks_operacionais = {}
-
-        for i, fase in enumerate(fases_lista):
-            with tabs[i]:
-                if i > 0 and perc_fases.get(fases_lista[i-1], 0) < 100:
-                    st.error(f"🚨 FASE BLOQUEADA: Conclua 100% da fase anterior.")
-                    perc_fases[fase] = 0.0
-                else:
-                    # BOTÃO MARCAR TODOS - OPERACIONAL
-                    if st.button(f"⚡ Marcar todos: {fase}", key=f"btn_op_all_{fase}"):
-                        for item in METODOLOGIA[fase]: st.session_state[f"chk_op_{fase}_{item}"] = True
-                        st.rerun()
-                    
-                    concluidos = 0
-                    itens = METODOLOGIA[fase]
-                    cols = st.columns(2)
-                    for idx, item in enumerate(itens):
-                        key = f"chk_op_{fase}_{item}"
-                        res = cols[idx % 2].checkbox(item, key=key)
-                        checks_operacionais[(fase, item)] = res
-                        if res: concluidos += 1
-                    perc_fases[fase] = (concluidos / len(itens)) * 100
-
-    # --- SPARKLINE COMPLETO (Com linha e borda condicional) ---
-    st.markdown("<h3 style='font-size: 18px; color: #143264;'>🛤️ Linha do Tempo da Metodologia</h3>", unsafe_allow_html=True)
-    st.markdown("""
-        <style>
-        .timeline-wrapper { position: relative; margin-bottom: 40px; padding-top: 10px; display: flex; justify-content: space-between; align-items: center; }
-        .timeline-line { position: absolute; top: 38px; left: 5%; right: 5%; height: 3px; background-color: #143264; z-index: 1; }
-        .pie-circle { 
-            width: 45px; height: 45px; border-radius: 50%; display: inline-block; 
-            position: relative; z-index: 2; background-color: white; 
-        }
-        </style>
-    """, unsafe_allow_html=True)
+if modo == "Checklist Operacional":
+    st.markdown("<h2 style='color: #143264;'>🏛️ Hub de Inteligência | Operação</h2>", unsafe_allow_html=True)
     
-    st.markdown("<div class='timeline-wrapper'>", unsafe_allow_html=True)
-    st.markdown("<div class='timeline-line'></div>", unsafe_allow_html=True)
-    cols_visual = st.columns(len(fases_lista))
-    for i, fase in enumerate(fases_lista):
-        valor = perc_fases[fase]
-        # Borda: Azul marinho se preenchido, Amarela se vazio
-        cor_borda = "#143264" if valor > 0 else "#FFD700"
-        with cols_visual[i]:
-            st.markdown(f"""
-                <div style='text-align: center; position: relative; z-index: 2;'>
-                    <div class='pie-circle' style='background: conic-gradient(#143264 {valor}%, #E0E0E0 0); border: 4px solid {cor_borda};'></div>
-                    <p style='font-size: 11px; font-weight: bold; color: #143264; margin-top: 5px;'>{fase}</p>
-                    <p style='font-size: 13px; color: #143264;'>{valor:.0f}%</p>
-                </div>
-            """, unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    # --- ORGANIZAÇÃO DOS CAMPOS EM COLUNAS (3 POR COLUNA) ---
+    with st.container():
+        col1, col2, col3 = st.columns(3)
+        
+        # Linha 1
+        nome_p = col1.text_input("Nome do Projeto")
+        oportunidade = col2.text_input("Oportunidade (CRM)")
+        gp_p = col3.text_input("Gerente do Projeto")
+        
+        # Linha 2
+        regional_p = col1.selectbox("Regional", ["Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
+        horas_cont = col2.number_input("Horas Contratadas", min_value=0.0)
+        d_inicio = col3.date_input("Data de Início", format="DD/MM/YYYY")
+        
+        # Linha 3
+        d_termino = col1.date_input("Data de Término", format="DD/MM/YYYY")
+        d_producao = col2.date_input("Data de Entrada em Produção", format="DD/MM/YYYY")
+        d_auditoria_cad = col3.date_input("Data da Auditoria", format="DD/MM/YYYY")
+        
+        # Linha 4 (Campo restante centralizado ou na primeira coluna)
+        resp_auditoria_cad = col1.text_input("Responsável pela Auditoria")
 
-    if st.button("💾 SALVAR NO HUB", use_container_width=True):
-        if nome_p and gp_p:
-            novo = Projeto(nome_projeto=nome_p, gerente_projeto=gp_p, regional=reg_p, **{MAPA_COLUNAS[f]: v for f, v in perc_fases.items()})
+    fases_lista = list(METODOLOGIA.keys())
+    perc_fases = {}
+    
+    st.markdown("---")
+    tabs = st.tabs(fases_lista)
+    checks_operacionais = {} # Para salvar o estado detalhado já no primeiro clique
+
+    for i, fase in enumerate(fases_lista):
+        with tabs[i]:
+            if i > 0 and perc_fases.get(fases_lista[i-1], 0) < 100:
+                st.error(f"🚨 FASE BLOQUEADA: Conclua 100% da fase anterior.")
+                perc_fases[fase] = 0.0
+            else:
+                concluidos = 0
+                itens = METODOLOGIA[fase]
+                cols = st.columns(2)
+                for idx, item in enumerate(itens):
+                    res = cols[idx % 2].checkbox(item, key=f"op_{fase}_{item}")
+                    checks_operacionais[(fase, item)] = res
+                    if res: concluidos += 1
+                perc_fases[fase] = (concluidos / len(itens)) * 100
+
+        # --- SPARKLINE ---
+        st.markdown("<h3 style='font-size: 18px; color: #143264;'>🛤️ Linha do Tempo da Metodologia</h3>", unsafe_allow_html=True)
+        st.markdown("""
+            <style>
+            .timeline-container { display: flex; align-items: center; position: relative; padding: 20px 0; width: 100%; justify-content: space-between; }
+            .timeline-line { position: absolute; top: 35px; left: 5%; right: 5%; height: 3px; background-color: #143264; z-index: 0; }
+            .pie-circle { width: 45px; height: 45px; border-radius: 50%; margin: 0 auto; display: flex; align-items: center; justify-content: center; position: relative; z-index: 2; background-color: white; }
+            </style>
+        """, unsafe_allow_html=True)
+        st.markdown("<div class='timeline-container'><div class='timeline-line'></div>", unsafe_allow_html=True)
+        cols_v = st.columns(len(fases_lista))
+        for i, fase in enumerate(fases_lista):
+            v = perc_fases[fase]
+            cor_b = "#143264" if v > 0 else "#FFD700"
+            with cols_v[i]:
+                st.markdown(f"<div style='text-align: center;'><div class='pie-circle' style='background: conic-gradient(#143264 {v}%, #E0E0E0 0); border: 4px solid {cor_b};'></div><p style='font-size: 11px; font-weight: bold; color: #143264; margin-top: 5px;'>{fase}</p></div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        if st.button("💾 SALVAR NO HUB", use_container_width=True):
+            novo = Projeto(nome_projeto=nome_p, gerente_projeto=gp_p, regional=regional_p, oportunidade=oportunidade, data_inicio=str(d_inicio), data_termino=str(d_termino), **{MAPA_COLUNAS[f]: v for f, v in perc_fases.items()})
             session.add(novo); session.flush()
-            # SALVA O DETALHAMENTO IMEDIATAMENTE PARA O AUDITOR NÃO TER RETRABALHO
             for (f, i), v in checks_operacionais.items():
                 session.add(StatusItem(projeto_id=novo.id, fase=f, item=i, entregue=1 if v else 0))
-            session.commit(); st.success("Projeto e Checklist salvos!")
+            session.commit(); st.success("Salvo com sucesso!")
 
-elif modo == "Dashboard Regional":
-    st.markdown("<h2 style='color: #143264;'>📊 Dashboard de Governança</h2>", unsafe_allow_html=True)
-    projs = session.query(Projeto).all()
-    if projs:
-        # Lógica de cálculo dinâmico para a escala de progresso do dashboard
-        df_list = []
-        for p in projs:
-            d = vars(p).copy()
-            itens = session.query(StatusItem).filter(StatusItem.projeto_id == p.id).all()
-            if itens:
-                d['Progresso %'] = round((sum(1 for i in itens if i.entregue) / sum(len(v) for v in METODOLOGIA.values())) * 100, 1)
-            else:
-                d['Progresso %'] = 0.0
-            df_list.append(d)
-            
-        df = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
-        df_display = df.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
-        
-        selecao = st.dataframe(
-            df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'data_auditoria']], 
-            use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
-            column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%")}
-        )
-        if len(selecao.selection.rows) > 0:
-            popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
-
-
+    elif modo == "Dashboard Regional":
+        st.markdown("<h2 style='color: #143264;'>📊 Dashboard de Governança</h2>", unsafe_allow_html=True)
+        projs = session.query(Projeto).all()
+        if projs:
+            df_list = []
+            for p in projs:
+                d = vars(p).copy()
+                itens = session.query(StatusItem).filter(StatusItem.projeto_id == p.id).all()
+                if itens:
+                    d['Progresso %'] = round((sum(1 for i in itens if i.entregue) / sum(len(v) for v in METODOLOGIA.values())) * 100, 1)
+                else: d['Progresso %'] = 0.0
+                df_list.append(d)
+            df_display = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
+            selecao = st.dataframe(df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'data_auditoria']], use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row", column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%")})
+            if len(selecao.selection.rows) > 0:
+                popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
 
 

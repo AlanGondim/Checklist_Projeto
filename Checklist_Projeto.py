@@ -75,26 +75,31 @@ MAPA_COLUNAS = {
 def popup_auditoria(projeto_id):
     proj = session.query(Projeto).filter(Projeto.id == projeto_id).first()
     
-    # BUSCA INFORMAÇÃO JÁ EXISTENTE (Evita retrabalho)
-    itens_salvos = session.query(StatusItem).filter(StatusItem.projeto_id == projeto_id).all()
-    status_map = {(i.fase, i.item): bool(i.entregue) for i in itens_salvos}
+    # Gerenciamento de estado para os checkboxes do popup
+    state_key = f"audit_state_{projeto_id}"
+    if state_key not in st.session_state:
+        st.session_state[state_key] = get_status_itens(proj.id)
     
     st.write(f"### Projeto: {proj.nome_projeto}")
     tab1, tab2, tab3 = st.tabs(["🔍 Auditoria Técnica", "📜 Histórico", "📂 Evidências"])
     
     with tab1:
-        novos_status = {}; total_e = 0; total_i = 0
+        total_e = 0; total_i = 0
         for fase, itens in METODOLOGIA.items():
-            # Se não houver itens detalhados no DB, usa o percentual da fase do projeto como fallback visual
-            f_perc = (sum(1 for i in itens if status_map.get((fase, i), False)) / len(itens)) * 100
+            f_concluidos = sum(1 for i in itens if st.session_state[state_key].get((fase, i), False))
+            f_perc = (f_concluidos / len(itens)) * 100
             
             with st.expander(f"{fase} - {f_perc:.0f}% Validado", expanded=(f_perc < 100)):
+                # BOTÃO MARCAR TODOS - AUDITORIA
+                if st.button(f"✅ Marcar Conformidade Total: {fase}", key=f"btn_aud_all_{fase}"):
+                    for item in itens: st.session_state[state_key][(fase, item)] = True
+                    st.rerun()
+
                 st.progress(f_perc / 100)
                 for item in itens:
-                    # Carrega o que foi marcado no Checklist Operacional ou Auditoria anterior
-                    val_db = status_map.get((fase, item), False)
-                    res = st.checkbox(item, value=val_db, key=f"aud_{proj.id}_{fase}_{item}")
-                    novos_status[(fase, item)] = res
+                    val_db = st.session_state[state_key].get((fase, item), False)
+                    res = st.checkbox(item, value=val_db, key=f"aud_check_{proj.id}_{fase}_{item}")
+                    st.session_state[state_key][(fase, item)] = res
                     if res: total_e += 1
                     total_i += 1
         
@@ -106,14 +111,14 @@ def popup_auditoria(projeto_id):
         st.divider()
         c1, c2 = st.columns(2)
         aud = c1.text_input("Analista Auditor MV", value=proj.responsavel_auditoria or "")
-        data_aud = c2.date_input("Data da Auditoria", value=datetime.now(), format="DD/MM/YYYY")
+        data_aud = c2.date_input("Data da Auditoria", value=datetime.now())
         
         if st.button("🚀 CONSOLIDAR AUDITORIA", use_container_width=True):
             session.query(StatusItem).filter(StatusItem.projeto_id == proj.id).delete()
-            for (f, i), v in novos_status.items():
+            for (f, i), v in st.session_state[state_key].items():
                 session.add(StatusItem(projeto_id=proj.id, fase=f, item=i, entregue=1 if v else 0))
             for fase in METODOLOGIA.keys():
-                count = sum(1 for it in METODOLOGIA[fase] if novos_status.get((fase, it)))
+                count = sum(1 for it in METODOLOGIA[fase] if st.session_state[state_key].get((fase, it)))
                 setattr(proj, MAPA_COLUNAS[f], (count / len(METODOLOGIA[fase])) * 100)
             proj.responsavel_auditoria = aud
             session.add(AuditoriaHistorico(projeto_id=proj.id, data_auditoria=str(data_aud), responsavel=aud, progresso_total=p_medio))
@@ -127,64 +132,58 @@ def popup_auditoria(projeto_id):
 
     with tab3:
         f_ev = st.selectbox("Fase:", list(METODOLOGIA.keys()))
-        up = st.file_uploader("Anexar Evidência", key="up_audit")
+        up = st.file_uploader("Anexar Prova")
         if st.button("Salvar Arquivo"):
             if up:
                 path = f"evidencias_audit/{proj.id}_{up.name}"
                 with open(path, "wb") as f: f.write(up.getbuffer())
                 session.add(Evidencia(projeto_id=proj.id, fase=f_ev, nome_arquivo=up.name, caminho=path))
-                session.commit(); st.success("Arquivo Salvo!")
+                session.commit(); st.success("Salvo!")
 
-# --- INTERFACE ---
-st.set_page_config(page_title="Hub de Inteligência MV", layout="wide")
-modo = st.sidebar.radio("Navegação", ["Checklist Operacional", "Dashboard Regional"])
+# --- INTERFACE PRINCIPAL ---
+if modo := st.sidebar.radio("Navegação", ["Checklist Operacional", "Dashboard Regional"]):
 
-if modo == "Checklist Operacional":
-    st.markdown("<h2 style='color: #143264;'>🏛️ Hub de Inteligência | Operação</h2>", unsafe_allow_html=True)
-    
-    # --- ORGANIZAÇÃO DOS CAMPOS EM COLUNAS (3 POR COLUNA) ---
-    with st.container():
-        col1, col2, col3 = st.columns(3)
-        
-        # Linha 1
-        nome_p = col1.text_input("Nome do Projeto")
-        oportunidade = col2.text_input("Oportunidade (CRM)")
-        gp_p = col3.text_input("Gerente do Projeto")
-        
-        # Linha 2
-        regional_p = col1.selectbox("Regional", ["Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
-        horas_cont = col2.number_input("Horas Contratadas", min_value=0.0)
-        d_inicio = col3.date_input("Data de Início", format="DD/MM/YYYY")
-        
-        # Linha 3
-        d_termino = col1.date_input("Data de Término", format="DD/MM/YYYY")
-        d_producao = col2.date_input("Data de Entrada em Produção", format="DD/MM/YYYY")
-        d_auditoria_cad = col3.date_input("Data da Auditoria", format="DD/MM/YYYY")
-        
-        # Linha 4 (Campo restante centralizado ou na primeira coluna)
-        resp_auditoria_cad = col1.text_input("Responsável pela Auditoria")
+    if modo == "Checklist Operacional":
+        st.markdown("<h2 style='color: #143264;'>🏛️ Hub de Inteligência | Operação</h2>", unsafe_allow_html=True)
+        with st.container():
+            col1, col2, col3 = st.columns(3)
+            nome_p = col1.text_input("Nome do Projeto")
+            oportunidade = col2.text_input("Oportunidade (CRM)")
+            gp_p = col3.text_input("Gerente do Projeto")
+            regional_p = col1.selectbox("Regional", ["Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
+            horas_cont = col2.number_input("Horas Contratadas", min_value=0.0)
+            d_inicio = col3.date_input("Data de Início", format="DD/MM/YYYY")
+            d_termino = col1.date_input("Data de Término", format="DD/MM/YYYY")
+            d_producao = col2.date_input("Data de Entrada em Produção", format="DD/MM/YYYY")
+            d_auditoria_cad = col3.date_input("Data da Auditoria", format="DD/MM/YYYY")
+            resp_auditoria_cad = col1.text_input("Responsável pela Auditoria")
 
-    fases_lista = list(METODOLOGIA.keys())
-    perc_fases = {}
-    
-    st.markdown("---")
-    tabs = st.tabs(fases_lista)
-    checks_operacionais = {} # Para salvar o estado detalhado já no primeiro clique
+        fases_lista = list(METODOLOGIA.keys())
+        perc_fases = {}
+        st.markdown("---")
+        tabs = st.tabs(fases_lista)
+        checks_operacionais = {}
 
-    for i, fase in enumerate(fases_lista):
-        with tabs[i]:
-            if i > 0 and perc_fases.get(fases_lista[i-1], 0) < 100:
-                st.error(f"🚨 FASE BLOQUEADA: Conclua 100% da fase anterior.")
-                perc_fases[fase] = 0.0
-            else:
-                concluidos = 0
-                itens = METODOLOGIA[fase]
-                cols = st.columns(2)
-                for idx, item in enumerate(itens):
-                    res = cols[idx % 2].checkbox(item, key=f"op_{fase}_{item}")
-                    checks_operacionais[(fase, item)] = res
-                    if res: concluidos += 1
-                perc_fases[fase] = (concluidos / len(itens)) * 100
+        for i, fase in enumerate(fases_lista):
+            with tabs[i]:
+                if i > 0 and perc_fases.get(fases_lista[i-1], 0) < 100:
+                    st.error(f"🚨 FASE BLOQUEADA: Conclua 100% da fase anterior.")
+                    perc_fases[fase] = 0.0
+                else:
+                    # BOTÃO MARCAR TODOS - OPERACIONAL
+                    if st.button(f"⚡ Marcar todos: {fase}", key=f"btn_op_all_{fase}"):
+                        for item in METODOLOGIA[fase]: st.session_state[f"chk_op_{fase}_{item}"] = True
+                        st.rerun()
+                    
+                    concluidos = 0
+                    itens = METODOLOGIA[fase]
+                    cols = st.columns(2)
+                    for idx, item in enumerate(itens):
+                        key = f"chk_op_{fase}_{item}"
+                        res = cols[idx % 2].checkbox(item, key=key)
+                        checks_operacionais[(fase, item)] = res
+                        if res: concluidos += 1
+                    perc_fases[fase] = (concluidos / len(itens)) * 100
 
     # --- SPARKLINE COMPLETO (Com linha e borda condicional) ---
     st.markdown("<h3 style='font-size: 18px; color: #143264;'>🛤️ Linha do Tempo da Metodologia</h3>", unsafe_allow_html=True)
@@ -250,6 +249,7 @@ elif modo == "Dashboard Regional":
         )
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

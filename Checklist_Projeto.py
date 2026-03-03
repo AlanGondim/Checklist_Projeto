@@ -49,9 +49,21 @@ class StatusItem(Base):
     __tablename__ = 'status_itens_detalhado'
     id = Column(Integer, primary_key=True)
     projeto_id = Column(Integer); fase = Column(String)
-    item = Column(String); entregue = Column(Integer) 
+    item = Column(String); entregue = Column(Integer)
 
 Base.metadata.create_all(engine)
+
+# Garantir colunas novas no banco existente
+def realizar_migracao():
+    inspector = inspect(engine)
+    colunas = [c['name'] for c in inspector.get_columns('historico_auditorias')]
+    with engine.connect() as conn:
+        if 'responsavel' not in colunas:
+            conn.execute(text("ALTER TABLE historico_auditorias ADD COLUMN responsavel TEXT"))
+        if 'progresso_total' not in colunas:
+            conn.execute(text("ALTER TABLE historico_auditorias ADD COLUMN progresso_total FLOAT"))
+        conn.commit()
+realizar_migracao()
 
 # --- METODOLOGIA ---
 METODOLOGIA = {
@@ -77,20 +89,17 @@ def get_status_itens(projeto_id):
 # --- POPUP DE AUDITORIA ---
 @st.dialog("📋 Auditoria de Rastreabilidade Integral", width="large")
 def popup_auditoria(projeto_id):
-    session.expire_all()
     proj = session.query(Projeto).filter(Projeto.id == projeto_id).first()
     status_db = get_status_itens(proj.id)
-    
     st.write(f"### Projeto: {proj.nome_projeto}")
     
-    t1, t2, t3 = st.tabs(["🔍 Auditoria Técnica", "📜 Histórico", "📂 Evidências"])
+    tab1, tab2, tab3 = st.tabs(["🔍 Auditoria Técnica", "📜 Histórico", "📂 Evidências"])
     
-    with t1:
+    with tab1:
         novos_status = {}; total_e = 0; total_i = 0
         for fase, itens in METODOLOGIA.items():
             f_concluidos = sum(1 for i in itens if status_db.get((fase, i), False))
             f_perc = (f_concluidos / len(itens)) * 100
-            
             with st.expander(f"{fase} - {f_perc:.0f}% Concluído", expanded=(f_perc < 100)):
                 st.progress(f_perc / 100)
                 for item in itens:
@@ -101,10 +110,8 @@ def popup_auditoria(projeto_id):
                     total_i += 1
         
         p_medio = (total_e / total_i) * 100
-        
-        # MENSAGEM ESPONTÂNEA DE CONFORMIDADE
         if p_medio == 100:
-            st.success("🌟 **CONFORMIDADE INTEGRAL IDENTIFICADA!** Todos os artefatos da metodologia foram validados e o projeto está blindado juridicamente.")
+            st.success("🌟 **PROJETO EM CONFORMIDADE INTEGRAL!** Todos os artefatos validados.")
             st.balloons()
         
         st.divider()
@@ -116,83 +123,112 @@ def popup_auditoria(projeto_id):
             session.query(StatusItem).filter(StatusItem.projeto_id == proj.id).delete()
             for (f, i), v in novos_status.items():
                 session.add(StatusItem(projeto_id=proj.id, fase=f, item=i, entregue=1 if v else 0))
-            
-            # ATUALIZAÇÃO FORÇADA DAS COLUNAS DE FASE PARA O DASHBOARD
             for fase in METODOLOGIA.keys():
                 count = sum(1 for it in METODOLOGIA[fase] if novos_status.get((fase, it)))
                 setattr(proj, MAPA_COLUNAS[f], (count / len(METODOLOGIA[fase])) * 100)
-            
             proj.responsavel_auditoria = aud
             session.add(AuditoriaHistorico(projeto_id=proj.id, data_auditoria=str(data_aud), responsavel=aud, progresso_total=p_medio))
-            session.commit()
-            st.success("Auditoria Consolidada!"); st.rerun()
+            session.commit(); st.success("Auditoria Salva!"); st.rerun()
 
-    with t2:
+    with tab2:
         hist = session.query(AuditoriaHistorico).filter(AuditoriaHistorico.projeto_id == proj.id).order_by(desc(AuditoriaHistorico.timestamp)).all()
         if hist:
             df_hist = pd.DataFrame([{"Data": h.data_auditoria, "Auditor": h.responsavel, "Performance": f"{h.progresso_total:.1f}%"} for h in hist])
             st.table(df_hist)
         else: st.info("Sem histórico.")
 
-    with t3:
-        # Lógica de evidências simplificada
+    with tab3:
         f_ev = st.selectbox("Fase:", list(METODOLOGIA.keys()))
-        up = st.file_uploader("Upload", key="up_audit")
-        if st.button("Salvar Arquivo"):
+        up = st.file_uploader("Anexar print de e-mail ou PDF", key="up_audit")
+        if st.button("Salvar Evidência"):
             if up:
-                path = f"evidencias_audit/{proj.id}_{up.name}"
+                path = f"evidencias_audit/{proj.id}_{f_ev}_{up.name}"
                 with open(path, "wb") as f: f.write(up.getbuffer())
                 session.add(Evidencia(projeto_id=proj.id, fase=f_ev, nome_arquivo=up.name, caminho=path))
-                session.commit(); st.success("Salvo!")
+                session.commit(); st.success("Evidência salva!")
+        st.divider()
+        evs = session.query(Evidencia).filter(Evidencia.projeto_id == proj.id).all()
+        for ev in evs:
+            with st.expander(f"📄 {ev.fase}: {ev.nome_arquivo}"):
+                if ev.nome_arquivo.lower().endswith(('png', 'jpg', 'jpeg')): st.image(ev.caminho)
+                with open(ev.caminho, "rb") as f: st.download_button("Baixar", f, file_name=ev.nome_arquivo, key=f"dl_{ev.id}")
 
-# --- DASHBOARD REGIONAL ---
-st.set_page_config(page_title="Hub MV PRO", layout="wide")
+# --- INTERFACE PRINCIPAL ---
+st.set_page_config(page_title="Hub de Inteligência MV", layout="wide")
 modo = st.sidebar.radio("Navegação", ["Checklist Operacional", "Dashboard Regional"])
 
 if modo == "Checklist Operacional":
-    st.header("🏛️ Operação de Projetos")
-    nome_p = st.text_input("Nome do Projeto")
-    gp_p = st.text_input("Gerente de Projeto")
-    if st.button("💾 SALVAR NO HUB"):
+    st.markdown("<h2 style='font-size: 24px; color: #143264; font-weight: bold;'>🏛️ Hub de Inteligência | Operação</h2>", unsafe_allow_html=True)
+    with st.container():
+        c1, c2, c3 = st.columns(3)
+        nome_p = c1.text_input("Nome do Projeto")
+        oportunidade = c2.text_input("Oportunidade (CRM)")
+        gp_p = c3.text_input("Gerente de Projeto")
+        c4, c5, c6 = st.columns(3)
+        horas_cont = c4.number_input("Horas Contratadas", min_value=0.0, step=10.0)
+        tipo_p = c5.selectbox("Tipo do Projeto", ["Migração", "Implantação", "Consultoria", "Revitalização"])
+        reg_p = c6.selectbox("Regional", ["Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
+        c7, c8, c9 = st.columns(3)
+        d_inicio = c7.date_input("Data de Início", format="DD/MM/YYYY")
+        d_termino = c8.date_input("Data de Término", format="DD/MM/YYYY")
+        d_producao = c9.date_input("Data de Entrada em Produção", format="DD/MM/YYYY")
+        c10, c11 = st.columns(2)
+        d_auditoria = c10.date_input("Data da Auditoria", format="DD/MM/YYYY")
+        resp_auditoria = c11.text_input("Responsável pela Auditoria")
+
+    fases_lista = list(METODOLOGIA.keys())
+    perc_fases = {}
+    for fase in fases_lista: perc_fases[fase] = 0.0
+
+    st.markdown("---")
+    tabs = st.tabs(fases_lista)
+    for i, fase in enumerate(fases_lista):
+        with tabs[i]:
+            if i > 0 and perc_fases.get(fases_lista[i-1], 0) < 100:
+                st.error(f"🚨 FASE BLOQUEADA: Conclua 100% da fase anterior para liberar '{fase}'.")
+                perc_fases[fase] = 0.0
+            else:
+                concluidos = 0
+                itens = METODOLOGIA[fase]
+                cols_check = st.columns(2)
+                for idx, item in enumerate(itens):
+                    if cols_check[idx % 2].checkbox(item, key=f"c_{fase}_{item}"):
+                        concluidos += 1
+                perc_fases[fase] = (concluidos / len(itens)) * 100
+
+    # Sparkline Visual
+    st.markdown("<h3 style='font-size: 18px; color: #143264;'>🛤️ Linha do Tempo da Metodologia</h3>", unsafe_allow_html=True)
+    st.markdown("""<style>.timeline-wrapper { position: relative; margin-bottom: 40px; padding-top: 10px; } .timeline-line { position: absolute; top: 38px; left: 5%; right: 5%; height: 3px; background-color: #143264; z-index: 1; } .pie-circle { width: 45px; height: 45px; border-radius: 50%; display: inline-block; position: relative; z-index: 2; background-color: white; border: 3px solid #143264; }</style>""", unsafe_allow_html=True)
+    cols_visual = st.columns(len(fases_lista))
+    for i, fase in enumerate(fases_lista):
+        valor = perc_fases[fase]
+        with cols_visual[i]:
+            st.markdown(f"<div style='text-align: center;'><div class='pie-circle' style='background: conic-gradient(#143264 {valor}%, #E0E0E0 0);'></div><p style='font-size: 11px; font-weight: bold;'>{fase}</p><p style='font-size: 14px;'>{valor:.0f}%</p></div>", unsafe_allow_html=True)
+
+    if st.button("💾 SALVAR NO HUB", use_container_width=True):
         if nome_p and gp_p:
-            novo = Projeto(nome_projeto=nome_p, gerente_projeto=gp_p)
-            session.add(novo); session.commit(); st.success("Registrado!")
+            novo = Projeto(nome_projeto=nome_p, gerente_projeto=gp_p, regional=reg_p, oportunidade=oportunidade, data_inicio=str(d_inicio), data_termino=str(d_termino), **{MAPA_COLUNAS[f]: v for f, v in perc_fases.items()})
+            session.add(novo); session.commit(); st.success("Salvo com sucesso!")
 
 elif modo == "Dashboard Regional":
-    st.header("📊 Dashboard de Governança Regional")
+    st.markdown("<h2 style='font-size: 24px; color: #143264; font-weight: bold;'>📊 Dashboard de Governança Regional</h2>", unsafe_allow_html=True)
     projs = session.query(Projeto).all()
-    
     if projs:
         data = []
         for p in projs:
-            p_dict = vars(p)
-            # CALCULO EM TEMPO REAL BASEADO NA AUDITORIA TÉCNICA (ITENS DETALHADOS)
+            p_dict = vars(p).copy()
             status_itens = get_status_itens(p.id)
             if status_itens:
-                total_itens = sum(len(v) for v in METODOLOGIA.values())
-                concluidos = sum(1 for v in status_itens.values() if v)
-                progresso_real = (concluidos / total_itens) * 100
+                progresso_real = (sum(1 for v in status_itens.values() if v) / sum(len(v) for v in METODOLOGIA.values())) * 100
             else:
-                # Fallback para média das fases reportadas se não houver auditoria técnica
                 progresso_real = np.mean([p.inicializacao, p.planejamento, p.workshop_de_processos, p.construcao, p.go_live, p.operacao_assistida, p.finalizacao])
-            
             p_dict['Progresso %'] = round(progresso_real, 1)
             data.append(p_dict)
             
         df = pd.DataFrame(data).drop_duplicates(subset=['nome_projeto'])
         df_display = df.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
+        selecao = st.dataframe(df_display[['id', 'nome_projeto', 'gerente_projeto', 'regional', 'Progresso %', 'data_auditoria']], use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row", column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%")})
         
-        st.info("💡 **Dica:** O Progresso % agora reflete a validação real dos artefatos auditados.")
-        
-        sel = st.dataframe(
-            df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'data_auditoria']], 
-            use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
-            column_config={
-                "id": None, 
-                "Progresso %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%")
-            }
-        )
-        
-        if len(sel.selection.rows) > 0:
-            idx = sel.selection.rows[0]
-            popup_auditoria(int(df_display.iloc[idx]['id']))
+        if len(selecao.selection.rows) > 0:
+            popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+    else: st.info("Nenhum projeto registrado.")

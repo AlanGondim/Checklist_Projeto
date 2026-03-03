@@ -160,20 +160,18 @@ def modal_pendencias(projeto_data):
             st.rerun()
 
     with tab2:
-        # (Mantém a lógica de histórico anterior...)
-        historico = session.query(AuditoriaHistorico).filter(AuditoriaHistorico.projeto_id == projeto_id).all()
-        st.table([{"Data": h.data_auditoria, "Progresso": f"{h.progresso_total:.1f}%", "Auditor": h.responsavel_auditoria} for h in historico])
-            .filter(AuditoriaHistorico.projeto_id == int(projeto_data['id']))\
-            .order_by(desc(AuditoriaHistorico.timestamp)).all()
+        # Linha 164: Busca o histórico ordenado pela data mais recente
+        historico = session.query(AuditoriaHistorico).filter(AuditoriaHistorico.projeto_id == projeto_id).order_by(desc(AuditoriaHistorico.timestamp)).all()
         
+        # Linha 166: Verifica se existem registros de auditoria
         if historico:
             for h in historico:
-                with st.expander(f"📅 {h.data_auditoria} - Fase: {h.fase_atual}"):
-                    st.write(f"**Responsável:** {h.responsavel_auditoria}")
-                    st.write(f"**Progresso na época:** {h.progresso_total}%")
-                    st.caption(f"Registrado em: {h.timestamp.strftime('%d/%m/%Y %H:%M')}")
+                # Linha 168: Cria um expander para cada auditoria realizada
+                with st.expander(f"📅 {h.data_auditoria} - Progresso: {h.progresso_total:.1f}%"):
+                    st.write(f"**Auditor:** {h.responsavel_auditoria}")
+                    st.caption(f"Registro: {h.timestamp.strftime('%d/%m/%Y %H:%M')}")
         else:
-            st.info("Nenhuma auditoria anterior registrada para este projeto.")
+            st.info("Sem histórico registrado.")
 
 # --- INTERFACE ---
 st.set_page_config(page_title="Hub de Inteligência MV", layout="wide")
@@ -334,6 +332,7 @@ elif modo == "Dashboard Regional":
                 
                 # Chama a função de popup definida no passo 1
                 modal_pendencias(dados_projeto)
+
 
 
 

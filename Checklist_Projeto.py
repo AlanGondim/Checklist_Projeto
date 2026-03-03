@@ -254,25 +254,6 @@ def popup_auditoria(projeto_id):
 st.set_page_config(page_title="Hub MV", layout="wide")
 modo = st.sidebar.radio("Menu", ["Checklist Operacional", "Dashboard Regional"])
 
-if modo == "Dashboard Regional":
-    st.title("📊 Dashboard Regional")
-    projs = session.query(Projeto).all()
-    if projs:
-        df = pd.DataFrame([vars(p) for p in projs]).drop_duplicates(subset=['nome_projeto'], keep='first')
-        df['Progresso %'] = df[list(MAPA_COLUNAS.values())].mean(axis=1).round(1)
-        
-        st.info("💡 Clique em uma linha para auditar entregas e documentos.")
-        sel = st.dataframe(df[['id', 'nome_projeto', 'gerente_projeto', 'regional', 'Progresso %']], 
-                           use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
-                           column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%")})
-        
-        if len(sel["selection"]["rows"]) > 0:
-            idx = sel["selection"]["rows"][0]
-            popup_auditoria(int(df.iloc[idx]['id']))
-    else: st.warning("Sem projetos.")
-else:
-    st.write("Aba Checklist Operacional (Original mantida conforme solicitado)")
-
 if modo == "Checklist Operacional":
     st.markdown("<h2 style='font-size: 24px; color: #143264; font-weight: bold;'>🏛️ Hub de Inteligência | Operação</h2>", unsafe_allow_html=True)
     
@@ -369,4 +350,5 @@ elif modo == "Dashboard Regional":
                     
         else: st.warning("Nenhum projeto encontrado.")
     else: st.info("Nenhum projeto registrado no sistema.")
+
 

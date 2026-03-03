@@ -135,13 +135,13 @@ def popup_auditoria(projeto_id):
                 session.add(Evidencia(projeto_id=proj.id, fase=f_ev, nome_arquivo=up.name, caminho=path))
                 session.commit(); st.success("Arquivo Salvo!")
 
-# --- INTERFACE ---
-st.set_page_config(page_title="Hub de Inteligência MV", layout="wide")
-modo = st.sidebar.radio("Navegação", ["Checklist Operacional", "Dashboard Regional"])
-
-if modo == "Checklist Operacional":
-    st.markdown("<h2 style='color: #143264;'>🏛️ Hub de Inteligência | Operação</h2>", unsafe_allow_html=True)
-    c1, c2, c3 = st.columns(3)
+        # --- INTERFACE ---
+        st.set_page_config(page_title="Hub de Inteligência MV", layout="wide")
+        modo = st.sidebar.radio("Navegação", ["Checklist Operacional", "Dashboard Regional"])
+        
+        if modo == "Checklist Operacional":
+            st.markdown("<h2 style='color: #143264;'>🏛️ Hub de Inteligência | Operação</h2>", unsafe_allow_html=True)
+            c1, c2, c3 = st.columns(3)
         
         # Linha 1
         nome_p = col1.text_input("Nome do Projeto")
@@ -249,6 +249,7 @@ elif modo == "Dashboard Regional":
         )
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

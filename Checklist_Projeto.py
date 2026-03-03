@@ -1,5 +1,4 @@
 import streamlit as st
-import pd as pd
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -301,3 +300,4 @@ elif modo == "Dashboard Regional":
                     
         else: st.warning("Nenhum projeto encontrado.")
     else: st.info("Nenhum projeto registrado.")
+

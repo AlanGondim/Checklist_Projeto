@@ -6,6 +6,7 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
+import io
 import os
 
 # --- DATABASE SETUP ---
@@ -15,54 +16,27 @@ engine = create_engine(DB_NAME)
 Session = sessionmaker(bind=engine)
 session = Session()
 
-# Diretório para evidências
-if not os.path.exists("evidencias_audit"):
-    os.makedirs("evidencias_audit")
-
 class Projeto(Base):
     __tablename__ = 'monitoramento_projetos'
     id = Column(Integer, primary_key=True)
-    nome_projeto = Column(String); gerente_projeto = Column(String)
-    regional = Column(String); oportunidade = Column(String)
-    horas_contratadas = Column(Float); tipo = Column(String)
-    data_inicio = Column(String); data_termino = Column(String)
-    data_entrada_producao = Column(String); data_auditoria = Column(String)
-    responsavel_auditoria = Column(String); timestamp = Column(DateTime, default=datetime.now)
+    nome_projeto = Column(String)
+    gerente_projeto = Column(String)
+    regional = Column(String)
+    oportunidade = Column(String)
+    horas_contratadas = Column(Float)
+    tipo = Column(String)
+    data_inicio = Column(String)
+    data_termino = Column(String)
+    data_entrada_producao = Column(String)
+    data_auditoria = Column(String)
+    responsavel_auditoria = Column(String)
+    timestamp = Column(DateTime, default=datetime.now)
     inicializacao = Column(Float); planejamento = Column(Float)
     workshop_de_processos = Column(Float); construcao = Column(Float)
     go_live = Column(Float); operacao_assistida = Column(Float)
     finalizacao = Column(Float)
 
-class AuditoriaHistorico(Base):
-    __tablename__ = 'historico_auditorias'
-    id = Column(Integer, primary_key=True)
-    projeto_id = Column(Integer); data_auditoria = Column(String)
-    responsavel = Column(String); progresso_total = Column(Float)
-    timestamp = Column(DateTime, default=datetime.now)
-
-class Evidencia(Base):
-    __tablename__ = 'evidencias_arquivos'
-    id = Column(Integer, primary_key=True)
-    projeto_id = Column(Integer); fase = Column(String)
-    nome_arquivo = Column(String); caminho = Column(String)
-    timestamp = Column(DateTime, default=datetime.now)
-
-class StatusItem(Base):
-    __tablename__ = 'status_itens_detalhado'
-    id = Column(Integer, primary_key=True)
-    projeto_id = Column(Integer); fase = Column(String)
-    item = Column(String); entregue = Column(Integer)
-
-# CRIA AS TABELAS
 Base.metadata.create_all(engine)
-
-# CORREÇÃO MANUAL: Tenta adicionar a coluna caso ela não exista (evita OperationalError)
-try:
-    with engine.connect() as conn:
-        conn.execute(text("ALTER TABLE historico_auditorias ADD COLUMN progresso_total FLOAT"))
-        conn.commit()
-except Exception:
-    pass # Coluna já existe ou erro ignorável
 
 # --- METODOLOGIA ---
 METODOLOGIA = {
@@ -81,79 +55,153 @@ MAPA_COLUNAS = {
     "Go Live": "go_live", "Operação Assistida": "operacao_assistida", "Finalização": "finalizacao"
 }
 
-def get_status_itens(projeto_id):
-    itens = session.query(StatusItem).filter(StatusItem.projeto_id == projeto_id).all()
-    return {(i.fase, i.item): bool(i.entregue) for i in itens}
+# --- INTERFACE ---
+st.set_page_config(page_title="Hub de Inteligência MV", layout="wide")
+modo = st.sidebar.radio("Navegação", ["Checklist Operacional", "Dashboard Regional"])
 
-# --- POPUP DE AUDITORIA ---
-@st.dialog("📋 Auditoria de Rastreabilidade Integral", width="large")
-def popup_auditoria(projeto_id):
-    # Forçar Refresh do objeto na sessão
-    session.expire_all()
-    proj = session.query(Projeto).filter(Projeto.id == projeto_id).first()
+if modo == "Checklist Operacional":
+    st.markdown("<h2 style='font-size: 24px; color: #143264; font-weight: bold;'>🏛️ Hub de Inteligência | Operação</h2>", unsafe_allow_html=True)
     
-    st.write(f"### Projeto: {proj.nome_projeto}")
-    status_db = get_status_itens(proj.id)
+    with st.container():
+        c1, c2, c3 = st.columns(3)
+        nome_p = c1.text_input("Nome do Projeto")
+        oportunidade = c2.text_input("Oportunidade (CRM)")
+        gp_p = c3.text_input("Gerente de Projeto")
+
+        c4, c5, c6 = st.columns(3)
+        horas_cont = c4.number_input("Horas Contratadas", min_value=0.0, step=10.0)
+        tipo_p = c5.selectbox("Tipo do Projeto", ["Migração", "Implantação", "Consultoria", "Revitalização"])
+        reg_p = c6.selectbox("Regional", ["Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
+
+        c7, c8, c9 = st.columns(3)
+        d_inicio = c7.date_input("Data de Início", format="DD/MM/YYYY")
+        d_termino = c8.date_input("Data de Término", format="DD/MM/YYYY")
+        d_producao = c9.date_input("Data de Entrada em Produção", format="DD/MM/YYYY")
+
+        c10, c11 = st.columns(2)
+        d_auditoria = c10.date_input("Data da Auditoria", format="DD/MM/YYYY")
+        resp_auditoria = c11.text_input("Responsável pela Auditoria")
+
+    fases_lista = list(METODOLOGIA.keys())
+    perc_fases = {}
+    for fase in fases_lista: perc_fases[fase] = 0.0
+
+    st.markdown("---")
+    tabs = st.tabs(fases_lista)
+    for i, fase in enumerate(fases_lista):
+        with tabs[i]:
+            if i > 0 and perc_fases.get(fases_lista[i-1], 0) < 100:
+                st.error(f"🚨 FASE BLOQUEADA: Conclua 100% da fase anterior para liberar '{fase}'.")
+                perc_fases[fase] = 0.0
+            else:
+                concluidos = 0
+                itens = METODOLOGIA[fase]
+                cols_check = st.columns(2)
+                for idx, item in enumerate(itens):
+                    if cols_check[idx % 2].checkbox(item, key=f"c_{fase}_{item}"):
+                        concluidos += 1
+                perc_fases[fase] = (concluidos / len(itens)) * 100
+
+    # --- RENDERIZAÇÃO SPARKLINE ---
+    st.markdown("<h3 style='font-size: 18px; color: #143264;'>🛤️ Linha do Tempo da Metodologia</h3>", unsafe_allow_html=True)
+    st.markdown("""
+        <style>
+        .timeline-wrapper { position: relative; margin-bottom: 40px; padding-top: 10px; }
+        .timeline-line { position: absolute; top: 38px; left: 5%; right: 5%; height: 3px; background-color: #143264; z-index: 1; }
+        .pie-circle { 
+            width: 45px; height: 45px; border-radius: 50%; display: inline-block;
+            transition: all 0.3s ease; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+            position: relative; z-index: 2; background-color: white;
+        }
+        </style>
+    """, unsafe_allow_html=True)
     
-    t1, t2, t3 = st.tabs(["🔍 Auditoria Técnica (Gaps)", "📜 Histórico", "📂 Evidências"])
+    st.markdown("<div class='timeline-wrapper'>", unsafe_allow_html=True)
+    st.markdown("<div class='timeline-line'></div>", unsafe_allow_html=True)
+    cols_visual = st.columns(len(fases_lista))
+    for i, fase in enumerate(fases_lista):
+        valor = perc_fases[fase]
+        border_color = "#FFD700" if valor < 100 else "#143264"
+        with cols_visual[i]:
+            st.markdown(f"""
+                <div style='text-align: center;'>
+                    <div class='pie-circle' style='background: conic-gradient(#143264 {valor}%, #E0E0E0 0); border: 3px solid {border_color};'></div>
+                    <p style='font-size: 11px; font-weight: bold; color: #143264; margin-top: 8px;'>{fase}</p>
+                    <p style='font-size: 14px; font-weight: bold; color: #143264;'>{valor:.0f}%</p>
+                </div>
+            """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    if st.button("💾 SALVAR NO HUB", use_container_width=True):
+        if nome_p and gp_p:
+            try:
+                novo = Projeto(
+                    nome_projeto=nome_p, gerente_projeto=gp_p, regional=reg_p, oportunidade=oportunidade,
+                    horas_contratadas=horas_cont, tipo=tipo_p, data_inicio=str(d_inicio),
+                    data_termino=str(d_termino), data_entrada_producao=str(d_producao),
+                    data_auditoria=str(d_auditoria), responsavel_auditoria=resp_auditoria,
+                    **{MAPA_COLUNAS[f]: v for f, v in perc_fases.items()}
+                )
+                session.add(novo); session.commit()
+                st.success("Snapshot salvo com sucesso!")
+                st.balloons()
+            except Exception as e: st.error(f"Erro ao salvar: {e}")
+        else: st.warning("Preencha o Nome do Projeto e do Gerente.")
+
+elif modo == "Dashboard Regional":
+    st.markdown("<h2 style='font-size: 24px; color: #143264; font-weight: bold;'>📊 Dashboard de Governança Regional</h2>", unsafe_allow_html=True)
     
-    with t1:
-        novos_status = {}
-        total_e = 0; total_i = 0
-        for fase, itens in METODOLOGIA.items():
-            entregues = sum(1 for i in itens if status_db.get((fase, i), False))
-            perc = (entregues / len(itens)) * 100
-            with st.expander(f"{fase} - Status: {perc:.0f}%"):
-                for item in itens:
-                    val = status_db.get((fase, item), False)
-                    res = st.checkbox(item, value=val, key=f"aud_{proj.id}_{fase}_{item}")
-                    novos_status[(fase, item)] = res
-                    if res: total_e += 1
-                    total_i += 1
+    query = session.query(Projeto).order_by(desc(Projeto.timestamp)).all()
+    if query:
+        df = pd.DataFrame([vars(p) for p in query]).drop_duplicates(subset=['nome_projeto'], keep='first')
+        df['regional'] = df['regional'].fillna("N/D")
+        df['gerente_projeto'] = df['gerente_projeto'].fillna("Sem Nome")
         
-        st.divider()
-        auditor = st.text_input("Analista MV Responsável", value=proj.responsavel_auditoria if proj.responsavel_auditoria else "")
-        if st.button("💾 CONSOLIDAR AUDITORIA"):
-            session.query(StatusItem).filter(StatusItem.projeto_id == proj.id).delete()
-            for (f, i), val in novos_status.items():
-                session.add(StatusItem(projeto_id=proj.id, fase=f, item=i, entregue=1 if val else 0))
+        # Mapeamento para exibição
+        col_fases_db = list(MAPA_COLUNAS.values())
+        col_fases_reais = list(MAPA_COLUNAS.keys())
+        df['Progresso %'] = df[col_fases_db].mean(axis=1).round(1)
+
+        # --- FILTROS SIDEBAR ---
+        st.sidebar.header("🎯 Filtros")
+        gerentes_list = sorted(df['gerente_projeto'].unique())
+        f_gp = st.sidebar.multiselect("Filtrar por Gerente", gerentes_list, default=gerentes_list)
+        regionais_list = sorted(df['regional'].unique())
+        f_reg = st.sidebar.multiselect("Filtrar por Regional", regionais_list, default=regionais_list)
+
+        df_filt = df[(df['gerente_projeto'].isin(f_gp)) & (df['regional'].isin(f_reg))]
+
+        if not df_filt.empty:
+            # --- RESUMO POR GERENTE ---
+            st.markdown("### 🏆 Performance Média por Gerente")
+            df_gerente = df_filt.groupby('gerente_projeto').agg({'Progresso %': 'mean', 'nome_projeto': 'count'}).reset_index()
+            df_gerente.columns = ['Gerente', 'Média de Entrega %', 'Qtd Projetos']
+            st.dataframe(df_gerente.sort_values('Média de Entrega %', ascending=False), use_container_width=True, hide_index=True,
+                         column_config={"Média de Entrega %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%")})
+
+            # --- TABELA COMPLETA INTERATIVA (EM SUBSTITUIÇÃO AO GRÁFICO) ---
+            st.markdown("---")
+            st.markdown("### 🔎 Detalhamento Completo da Carteira")
+            st.info("A tabela abaixo apresenta todos os projetos filtrados com o status de cada fase da metodologia.")
             
-            p_medio = (total_e / total_i) * 100
-            session.add(AuditoriaHistorico(projeto_id=proj.id, data_auditoria=str(datetime.now().date()), responsavel=auditor, progresso_total=p_medio))
-            session.commit()
-            st.success("Salvo!"); st.rerun()
+            # Preparação do DataFrame Detalhado
+            df_detalhe = df_filt.copy()
+            # Renomear colunas do DB para nomes legíveis da Metodologia
+            df_detalhe = df_detalhe.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
+            
+            # Seleção e Ordenação das Colunas
+            colunas_view = ['nome_projeto', 'gerente_projeto', 'regional', 'tipo', 'Progresso %'] + col_fases_reais
+            df_detalhe = df_detalhe[colunas_view].sort_values(by='Progresso %', ascending=False)
 
-    with t2:
-        # Consulta segura para o histórico
-        hist = session.query(AuditoriaHistorico).filter(AuditoriaHistorico.projeto_id == proj.id).order_by(desc(AuditoriaHistorico.timestamp)).all()
-        if hist:
-            for h in hist:
-                st.write(f"📅 **{h.data_auditoria}** | Auditor: `{h.responsavel}` | Progresso: {h.progresso_total:.1f}%")
-        else: st.info("Sem histórico.")
-
-    with t3:
-        # [Lógica de evidências conforme explicado anteriormente...]
-        st.write("### 📎 Depósito de Evidências")
-        f_ev = st.selectbox("Fase:", list(METODOLOGIA.keys()))
-        up = st.file_uploader("Upload de arquivos")
-        if st.button("Anexar"):
-            if up:
-                path = f"evidencias_audit/{proj.id}_{up.name}"
-                with open(path, "wb") as f: f.write(up.getbuffer())
-                session.add(Evidencia(projeto_id=proj.id, fase=f_ev, nome_arquivo=up.name, caminho=path))
-                session.commit(); st.success("Anexado!")
-
-# --- DASHBOARD ---
-st.set_page_config(page_title="Hub MV", layout="wide")
-projs = session.query(Projeto).all()
-if projs:
-    df = pd.DataFrame([vars(p) for p in projs]).drop_duplicates(subset=['nome_projeto'])
-    df['Progresso %'] = df[list(MAPA_COLUNAS.values())].mean(axis=1).round(1)
-    df_display = df.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
-    
-    sel = st.dataframe(df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %']], 
-                       on_select="rerun", selection_mode="single-row", hide_index=True)
-    
-    if len(sel.selection.rows) > 0:
-        idx = sel.selection.rows[0]
-        popup_auditoria(int(df_display.iloc[idx]['id']))
+            # Configuração da Tabela Interativa
+            st.dataframe(
+                df_detalhe,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Progresso %": st.column_config.ProgressColumn("Progresso Total", min_value=0, max_value=100, format="%.1f%%"),
+                    **{fase: st.column_config.NumberColumn(f"{fase} %", format="%.0f%%") for fase in col_fases_reais}
+                }
+            )
+        else: st.warning("Nenhum projeto encontrado para os filtros selecionados.")
+    else: st.info("Nenhum projeto registrado.")

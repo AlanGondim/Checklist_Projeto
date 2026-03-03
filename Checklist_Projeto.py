@@ -51,14 +51,6 @@ class AuditoriaHistorico(Base):
 
 Base.metadata.create_all(engine)
 
-class ItemAuditoria(Base):
-    __tablename__ = 'itens_auditados'
-    id = Column(Integer, primary_key=True)
-    projeto_id = Column(Integer)
-    fase = Column(String)
-    item_nome = Column(String)
-    entregue = Column(Integer)  # 1 para Sim, 0 para Não
-
 def get_status_itens(projeto_id):
     itens = session.query(ItemAuditoria).filter(ItemAuditoria.projeto_id == projeto_id).all()
     return {(item.fase, item.item_nome): bool(item.entregue) for item in itens}
@@ -75,6 +67,14 @@ def salvar_status_itens(projeto_id, status_dict):
         )
         session.add(novo_item)
     session.commit()
+
+class ItemAuditoria(Base):
+    __tablename__ = 'itens_auditados'
+    id = Column(Integer, primary_key=True)
+    projeto_id = Column(Integer)
+    fase = Column(String)
+    item_nome = Column(String)
+    entregue = Column(Integer)  # 1 para Sim, 0 para Não
 
 # --- METODOLOGIA ---
 METODOLOGIA = {
@@ -333,6 +333,7 @@ elif modo == "Dashboard Regional":
                 
                 # Chama a função de popup definida no passo 1
                 modal_pendencias(dados_projeto)
+
 
 
 

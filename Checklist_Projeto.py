@@ -142,13 +142,32 @@ modo = st.sidebar.radio("Navegação", ["Checklist Operacional", "Dashboard Regi
 if modo == "Checklist Operacional":
     st.markdown("<h2 style='color: #143264;'>🏛️ Hub de Inteligência | Operação</h2>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
-    nome_p = c1.text_input("Nome do Projeto")
-    oportunidade = c2.text_input("CRM")
-    gp_p = c3.text_input("Gerente")
+        
+        # Linha 1
+        nome_p = col1.text_input("Nome do Projeto")
+        oportunidade = col2.text_input("Oportunidade (CRM)")
+        gp_p = col3.text_input("Gerente do Projeto")
+        
+        # Linha 2
+        regional_p = col1.selectbox("Regional", ["Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
+        horas_cont = col2.number_input("Horas Contratadas", min_value=0.0)
+        d_inicio = col3.date_input("Data de Início", format="DD/MM/YYYY")
+        
+        # Linha 3
+        d_termino = col1.date_input("Data de Término", format="DD/MM/YYYY")
+        d_producao = col2.date_input("Data de Entrada em Produção", format="DD/MM/YYYY")
+        d_auditoria_cad = col3.date_input("Data da Auditoria", format="DD/MM/YYYY")
+        
+        # Linha 4 (Campo restante centralizado ou na primeira coluna)
+        resp_auditoria_cad = col1.text_input("Responsável pela Auditoria")
 
+    # --- LÓGICA DE TABS E BLOQUEIO ---
     fases_lista = list(METODOLOGIA.keys())
-    perc_fases = {}; checks_ops = {}
+    perc_fases = {}
+    st.markdown("---")
     tabs = st.tabs(fases_lista)
+    checks_operacionais = {}
+
     for i, fase in enumerate(fases_lista):
         with tabs[i]:
             if i > 0 and perc_fases.get(fases_lista[i-1], 0) < 100:
@@ -164,7 +183,7 @@ if modo == "Checklist Operacional":
                 cols = st.columns(2)
                 for idx, item in enumerate(itens):
                     res = cols[idx % 2].checkbox(item, key=f"op_chk_{fase}_{item}")
-                    checks_ops[(fase, item)] = res
+                    checks_operacionais[(fase, item)] = res
                     if res: concluidos += 1
                 perc_fases[fase] = (concluidos / len(itens)) * 100
 
@@ -230,6 +249,7 @@ elif modo == "Dashboard Regional":
         )
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

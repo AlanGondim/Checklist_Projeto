@@ -139,15 +139,25 @@ def popup_auditoria(projeto_id):
 st.set_page_config(page_title="Hub de Inteligência MV", layout="wide")
 modo = st.sidebar.radio("Navegação", ["Checklist Operacional", "Dashboard Regional"])
 
-if modo == "Checklist Operacional":
-    st.markdown("<h2 style='color: #143264;'>🏛️ Hub de Inteligência | Operação</h2>", unsafe_allow_html=True)
-    with st.container():
+with st.container():
         c1, c2, c3 = st.columns(3)
         nome_p = c1.text_input("Nome do Projeto")
-        oportunidade = c2.text_input("CRM")
-        gp_p = c3.text_input("Gerente")
-        c4, c5, c6 = st.columns(3); reg_p = c6.selectbox("Regional", ["Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
-        # ... (demais campos simplificados para brevidade)
+        oportunidade = c2.text_input("Oportunidade (CRM)")
+        gp_p = c3.text_input("Gerente de Projeto")
+
+        c4, c5, c6 = st.columns(3)
+        horas_cont = c4.number_input("Horas Contratadas", min_value=0.0, step=10.0)
+        tipo_p = c5.selectbox("Tipo do Projeto", ["Migração", "Implantação", "Consultoria", "Revitalização"])
+        reg_p = c6.selectbox("Regional", ["Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
+
+        c7, c8, c9 = st.columns(3)
+        d_inicio = c7.date_input("Data de Início", format="DD/MM/YYYY")
+        d_termino = c8.date_input("Data de Término", format="DD/MM/YYYY")
+        d_producao = c9.date_input("Data de Entrada em Produção", format="DD/MM/YYYY")
+
+        c10, c11 = st.columns(2)
+        d_auditoria = c10.date_input("Data da Auditoria", format="DD/MM/YYYY")
+        resp_auditoria = c11.text_input("Responsável pela Auditoria")
 
     fases_lista = list(METODOLOGIA.keys())
     perc_fases = {}
@@ -235,4 +245,5 @@ elif modo == "Dashboard Regional":
         )
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 

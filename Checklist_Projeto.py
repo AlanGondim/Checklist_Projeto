@@ -106,7 +106,7 @@ def popup_auditoria(projeto_id):
         st.divider()
         c1, c2 = st.columns(2)
         aud = c1.text_input("Analista Auditor MV", value=proj.responsavel_auditoria or "")
-        data_aud = c2.date_input("Data da Auditoria", value=datetime.now())
+        data_aud = c2.date_input("Data da Auditoria", value=datetime.now(), format="DD/MM/YYYY")
         
         if st.button("🚀 CONSOLIDAR AUDITORIA", use_container_width=True):
             session.query(StatusItem).filter(StatusItem.projeto_id == proj.id).delete()
@@ -235,4 +235,5 @@ elif modo == "Dashboard Regional":
         )
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 

@@ -236,6 +236,16 @@ if modo == "Checklist Operacional":
 
 elif modo == "Dashboard Regional":
     st.markdown("<h2 style='color: #143264;'>📊 Dashboard de Governança</h2>", unsafe_allow_html=True)
+    
+    # Legenda Racional de Cores
+    st.markdown("""
+        <div style='display: flex; gap: 20px; font-size: 12px; margin-bottom: 10px;'>
+            <span style='color: red;'>●</span> Até 50% (Crítico)
+            <span style='color: #FFD700;'>●</span> 51% a 75% (Atenção)
+            <span style='color: #143264;'>●</span> > 75% (Conforme)
+        </div>
+    """, unsafe_allow_html=True)
+
     projs = session.query(Projeto).all()
     if projs:
         df_list = []
@@ -246,25 +256,17 @@ elif modo == "Dashboard Regional":
             entregues = sum(1 for i in itens if i.entregue)
             valor_perc = (entregues / total_m) * 100 if total_m > 0 else 0.0
             d['Progresso %'] = round(valor_perc, 1)
-
-            # Lógica de Cores conforme solicitado
-            if valor_perc <= 50:
-                d['cor_barra'] = "red"
-            elif valor_perc <= 75:
-                d['cor_barra'] = "#FFD700" # Amarelo
-            else:
-                d['cor_barra'] = "#143264" # Azul Marinho
             
+            # Remove chaves internas do SQLAlchemy para não sujar o DataFrame
+            d.pop('_sa_instance_state', None)
             df_list.append(d)
         
         df_display = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
         
-        # IMPORTANTE: Garantir que 'cor_barra' esteja na lista de colunas enviada ao dataframe
-        colunas_exibicao = ['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'data_auditoria', 'cor_barra']
-        
-        # Renomeação para interface (opcional, mas limpa o visual)
-        df_render = df_display[colunas_exibicao].rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
+        # Ordenação por progresso
+        df_render = df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'data_auditoria']]
 
+        # Renderização estável
         selecao = st.dataframe(
             df_render, 
             use_container_width=True, 
@@ -272,25 +274,21 @@ elif modo == "Dashboard Regional":
             on_select="rerun", 
             selection_mode="single-row", 
             column_config={
-                "id": None, # Esconde o ID
-                "cor_barra": None, # Esconde a coluna de texto da cor (ESSENCIAL)
+                "id": None,
                 "Progresso %": st.column_config.ProgressColumn(
                     "Progresso %",
                     min_value=0, 
                     max_value=100, 
                     format="%.1f%%",
-                    color="cor_barra" # Busca a cor na coluna oculta
-                )
+                    color="#143264" # Cor fixa para evitar erro de referência no Cloud
+                ),
+                "data_auditoria": "Última Auditoria"
             }
         )
         
         if len(selecao.selection.rows) > 0:
             idx = selecao.selection.rows[0]
             popup_auditoria(int(df_render.iloc[idx]['id']))
-
-
-
-
 
 
 

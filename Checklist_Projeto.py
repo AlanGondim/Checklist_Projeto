@@ -177,11 +177,15 @@ if modo == "Checklist Operacional":
                 st.error(f"🚨 FASE BLOQUEADA: Conclua 100% da fase anterior.")
                 perc_fases[fase] = 0.0
             else:
+                if st.button(f"⚡ Marcar todos: {fase}", key=f"btn_op_{fase}"):
+                    for item in METODOLOGIA[fase]: st.session_state[f"chk_op_{fase}_{item}"] = True
+                    st.rerun()
+                
                 concluidos = 0
                 itens = METODOLOGIA[fase]
                 cols = st.columns(2)
                 for idx, item in enumerate(itens):
-                    res = cols[idx % 2].checkbox(item, key=f"op_{fase}_{item}")
+                    res = cols[idx % 2].checkbox(item, key=f"chk_op_{fase}_{item}")
                     checks_operacionais[(fase, item)] = res
                     if res: concluidos += 1
                 perc_fases[fase] = (concluidos / len(itens)) * 100
@@ -250,6 +254,7 @@ elif modo == "Dashboard Regional":
         )
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

@@ -157,7 +157,7 @@ if modo == "Checklist Operacional":
         oportunidade = col2.text_input("CRM")
         gp_p = col3.text_input("Gerente")
         reg_p = col1.selectbox("Regional", [" ", "Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
-        horas_cont = col2.number_input("Horas Contratadas", min_value=0.0)
+        horas_cont = col2.number_input("Horas Contratadas", min_value=0.0, step=10.0)
         d_inicio = col3.date_input("Data de Início", format="DD/MM/YYYY")
         d_termino = col1.date_input("Data de Término", format="DD/MM/YYYY")
         d_producao = col2.date_input("Data de Entrada em Produção", format="DD/MM/YYYY")
@@ -240,6 +240,7 @@ elif modo == "Dashboard Regional":
         df_display = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
         sel = st.dataframe(df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'Farol']], use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row", column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(format="%.1f%%", color="#143264")})
         if len(sel.selection.rows) > 0: popup_auditoria(int(df_display.iloc[sel.selection.rows[0]]['id']))
+
 
 
 

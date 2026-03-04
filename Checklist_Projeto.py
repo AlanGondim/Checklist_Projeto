@@ -75,7 +75,6 @@ MAPA_COLUNAS = {
 def analisar_status_ia(proj):
     hoje = date.today()
     try:
-        # Conversão segura das strings de data para objetos date
         d_ini = datetime.strptime(proj.data_inicio, '%Y-%m-%d').date()
         d_prod = datetime.strptime(proj.data_entrada_producao, '%Y-%m-%d').date()
         d_ter = datetime.strptime(proj.data_termino, '%Y-%m-%d').date()
@@ -98,12 +97,25 @@ def popup_auditoria(projeto_id):
     itens_salvos = session.query(StatusItem).filter(StatusItem.projeto_id == projeto_id).all()
     status_map = {(i.fase, i.item): bool(i.entregue) for i in itens_salvos}
     
-    st.write(f"### Projeto: {proj.nome_projeto}")
+    # --- MELHORIA SOLICITADA: RESUMO DE INFORMAÇÕES DO PROJETO ---
+    st.markdown(f"### 📑 Dashboard Detalhado: {proj.nome_projeto}")
+    
+    with st.container(border=True):
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Oportunidade CRM", proj.oportunidade)
+        c2.metric("Gerente do Projeto", proj.gerente_projeto)
+        c3.metric("Regional", proj.regional)
+        c4.metric("Horas Contratadas", f"{proj.horas_contratadas}h")
+        
+        d1, d2, d3, d4 = st.columns(4)
+        d1.write(f"📅 **Início:** {proj.data_inicio}")
+        d2.write(f"🏁 **Término:** {proj.data_termino}")
+        d3.write(f"🚀 **Produção:** {proj.data_entrada_producao}")
+        d4.write(f"🧐 **Auditor:** {proj.responsavel_auditoria or 'Não designado'}")
 
     # --- GATILHO IA ---
     fase_ia, docs_sugeridos = analisar_status_ia(proj)
-    st.info(f"🤖 **Insight de IA:** Com base na data de hoje, o projeto deveria estar na fase **{fase_ia}**.")
-    st.warning(f"📑 **Documentação Crítica XPTO:** Certifique-se de validar: {', '.join(docs_sugeridos)}")
+    st.info(f"🤖 **IA MV:** O cronograma indica fase de **{fase_ia}**. Valide: {', '.join(docs_sugeridos)}")
 
     tab1, tab2, tab3 = st.tabs(["🔍 Auditoria Técnica", "📜 Histórico", "📂 Evidências"])
     
@@ -127,9 +139,7 @@ def popup_auditoria(projeto_id):
                     if res: total_e += 1
                     total_i += 1
         
-        p_medio = (total_e / total_i) * 100
         st.divider()
-        aud = st.text_input("Analista Auditor MV", value=proj.responsavel_auditoria or "")
         if st.button("🚀 CONSOLIDAR AUDITORIA", use_container_width=True):
             session.query(StatusItem).filter(StatusItem.projeto_id == proj.id).delete()
             for (f, i), v in novos_status.items():
@@ -137,7 +147,6 @@ def popup_auditoria(projeto_id):
             for f in METODOLOGIA.keys():
                 count = sum(1 for it in METODOLOGIA[f] if novos_status.get((f, it)))
                 setattr(proj, MAPA_COLUNAS[f], (count / len(METODOLOGIA[f])) * 100)
-            proj.responsavel_auditoria = aud
             proj.data_auditoria = str(date.today())
             session.commit(); st.success("Auditado!"); st.rerun()
 
@@ -167,7 +176,7 @@ if modo == "Checklist Operacional":
         oportunidade = col2.text_input("CRM")
         gp_p = col3.text_input("Gerente")
         reg_p = col1.selectbox("Regional", ["Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
-        horas_cont = col2.number_input("Horas Contratadas", min_value=0.0, step=10.0)
+        horas_cont = col2.number_input("Horas Contratadas", min_value=0.0)
         d_inicio = col3.date_input("Data de Início", format="DD/MM/YYYY")
         d_termino = col1.date_input("Data de Término", format="DD/MM/YYYY")
         d_producao = col2.date_input("Data de Produção", format="DD/MM/YYYY")
@@ -219,7 +228,6 @@ elif modo == "Dashboard Regional":
             v_perc = (entregues / total_m) * 100 if total_m > 0 else 0.0
             d['Progresso %'] = round(v_perc, 1)
             
-            # --- FAROL DE CONFORMIDADE ---
             try:
                 d_fim = datetime.strptime(p.data_termino, '%Y-%m-%d').date()
                 if v_perc >= 100: d['Farol'] = "🟢 Conforme"
@@ -231,4 +239,3 @@ elif modo == "Dashboard Regional":
         df_display = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
         sel = st.dataframe(df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'Farol']], use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row", column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(format="%.1f%%", color="#143264")})
         if len(sel.selection.rows) > 0: popup_auditoria(int(df_display.iloc[sel.selection.rows[0]]['id']))
-

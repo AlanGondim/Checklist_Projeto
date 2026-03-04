@@ -244,41 +244,49 @@ elif modo == "Dashboard Regional":
             itens = session.query(StatusItem).filter(StatusItem.projeto_id == p.id).all()
             total_m = sum(len(v) for v in METODOLOGIA.values())
             entregues = sum(1 for i in itens if i.entregue)
-            v = (entregues / total_m) * 100 if total_m > 0 else 0.0
-            d['Progresso %'] = round(v, 1)
+            valor_perc = (entregues / total_m) * 100 if total_m > 0 else 0.0
+            d['Progresso %'] = round(valor_perc, 1)
 
-            # --- LÓGICA DE CORES DINÂMICAS ---
-            if v <= 50:
+            # Lógica de Cores conforme solicitado
+            if valor_perc <= 50:
                 d['cor_barra'] = "red"
-            elif v <= 75:
-                d['cor_barra'] = "#FFD700" # Amarelo/Dourado
+            elif valor_perc <= 75:
+                d['cor_barra'] = "#FFD700" # Amarelo
             else:
                 d['cor_barra'] = "#143264" # Azul Marinho
             
             df_list.append(d)
         
         df_display = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
-        df_display = df_display.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
         
+        # IMPORTANTE: Garantir que 'cor_barra' esteja na lista de colunas enviada ao dataframe
+        colunas_exibicao = ['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'data_auditoria', 'cor_barra']
+        
+        # Renomeação para interface (opcional, mas limpa o visual)
+        df_render = df_display[colunas_exibicao].rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
+
         selecao = st.dataframe(
-            df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'data_auditoria', 'cor_barra']], 
+            df_render, 
             use_container_width=True, 
             hide_index=True, 
             on_select="rerun", 
             selection_mode="single-row", 
             column_config={
-                "id": None, 
-                "cor_barra": None, # Esconde a coluna de texto da cor
+                "id": None, # Esconde o ID
+                "cor_barra": None, # Esconde a coluna de texto da cor (ESSENCIAL)
                 "Progresso %": st.column_config.ProgressColumn(
+                    "Progresso %",
                     min_value=0, 
                     max_value=100, 
                     format="%.1f%%",
-                    color="cor_barra" # <--- Aqui o componente lê a cor dinâmica
+                    color="cor_barra" # Busca a cor na coluna oculta
                 )
             }
         )
+        
         if len(selecao.selection.rows) > 0:
-            popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+            idx = selecao.selection.rows[0]
+            popup_auditoria(int(df_render.iloc[idx]['id']))
 
 
 

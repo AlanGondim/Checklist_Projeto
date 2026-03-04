@@ -238,24 +238,44 @@ elif modo == "Dashboard Regional":
     st.markdown("<h2 style='color: #143264;'>📊 Dashboard de Governança</h2>", unsafe_allow_html=True)
     projs = session.query(Projeto).all()
     if projs:
-        # Lógica de cálculo dinâmico para a escala de progresso do dashboard
         df_list = []
         for p in projs:
             d = vars(p).copy()
             itens = session.query(StatusItem).filter(StatusItem.projeto_id == p.id).all()
-            if itens:
-                d['Progresso %'] = round((sum(1 for i in itens if i.entregue) / sum(len(v) for v in METODOLOGIA.values())) * 100, 1)
+            total_m = sum(len(v) for v in METODOLOGIA.values())
+            entregues = sum(1 for i in itens if i.entregue)
+            v = (entregues / total_m) * 100 if total_m > 0 else 0.0
+            d['Progresso %'] = round(v, 1)
+
+            # --- LÓGICA DE CORES DINÂMICAS ---
+            if v <= 50:
+                d['cor_barra'] = "red"
+            elif v <= 75:
+                d['cor_barra'] = "#FFD700" # Amarelo/Dourado
             else:
-                d['Progresso %'] = 0.0
-            df_list.append(d)
+                d['cor_barra'] = "#143264" # Azul Marinho
             
-        df = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
-        df_display = df.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
+            df_list.append(d)
+        
+        df_display = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
+        df_display = df_display.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
         
         selecao = st.dataframe(
-            df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'data_auditoria']], 
-            use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
-            column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%", color="#143264")}
+            df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'data_auditoria', 'cor_barra']], 
+            use_container_width=True, 
+            hide_index=True, 
+            on_select="rerun", 
+            selection_mode="single-row", 
+            column_config={
+                "id": None, 
+                "cor_barra": None, # Esconde a coluna de texto da cor
+                "Progresso %": st.column_config.ProgressColumn(
+                    min_value=0, 
+                    max_value=100, 
+                    format="%.1f%%",
+                    color="cor_barra" # <--- Aqui o componente lê a cor dinâmica
+                )
+            }
         )
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))

@@ -152,22 +152,24 @@ if modo == "Checklist Operacional":
         col1, col2, col3 = st.columns(3)
         
         # Linha 1
-        nome_p = col1.text_input("Nome do Projeto")
         oportunidade = col2.text_input("Oportunidade (CRM)")
+        nome_p = col1.text_input("Nome do Projeto")
         gp_p = col3.text_input("Gerente do Projeto")
         
         # Linha 2
         regional_p = col1.selectbox("Regional", [" ", "Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
         horas_cont = col2.number_input("Horas Contratadas", min_value=0.0, step=10.0)
-        d_inicio = col3.date_input("Data de Início", format="DD/MM/YYYY")
+        
         
         # Linha 3
+        d_inicio = col3.date_input("Data de Início", format="DD/MM/YYYY")
         d_termino = col1.date_input("Data de Término", format="DD/MM/YYYY")
         d_producao = col2.date_input("Data de Entrada em Produção", format="DD/MM/YYYY")
-        d_auditoria_cad = col3.date_input("Data da Auditoria", format="DD/MM/YYYY")
+       
         
         # Linha 4 (Campo restante centralizado ou na primeira coluna)
         resp_auditoria_cad = col1.text_input("Responsável pela Auditoria")
+        d_auditoria_cad = col3.date_input("Data da Auditoria", format="DD/MM/YYYY")
 
     fases_lista = list(METODOLOGIA.keys())
     perc_fases = {}
@@ -259,6 +261,7 @@ elif modo == "Dashboard Regional":
         )
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

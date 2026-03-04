@@ -70,6 +70,26 @@ MAPA_COLUNAS = {
     "Go Live": "go_live", "Operação Assistida": "operacao_assistida", "Finalização": "finalizacao"
 }
 
+# --- LÓGICA DE IA: CONFRONTO TEMPORAL ---
+def analisar_status_ia(proj):
+    hoje = date.today()
+    try:
+        # Conversão das strings de data para objetos date
+        d_ini = datetime.strptime(proj.data_inicio, '%Y-%m-%d').date()
+        d_prod = datetime.strptime(proj.data_entrada_producao, '%Y-%m-%d').date()
+        d_ter = datetime.strptime(proj.data_termino, '%Y-%m-%d').date()
+        
+        if hoje < d_ini:
+            return "Pré-Projeto", ["TAP", "Proposta Técnica"]
+        elif d_ini <= hoje < d_prod:
+            return "Em Implantação (Workshop/Construção)", ["Blueprint", "Carga Precursora", "Homologação"]
+        elif d_prod <= hoje < d_ter:
+            return "Em Go-Live / Operação Assistida", ["Ata de Go/No Go", "Termo de Aceite Operacional"]
+        else:
+            return "Fase de Finalização", ["TEP", "Lições Aprendidas"]
+    except Exception:
+        return "Datas não preenchidas corretamente", []
+
 # --- POPUP DE AUDITORIA ---
 @st.dialog("📋 Auditoria de Rastreabilidade Integral", width="large")
 def popup_auditoria(projeto_id):
@@ -80,12 +100,18 @@ def popup_auditoria(projeto_id):
     status_map = {(i.fase, i.item): bool(i.entregue) for i in itens_salvos}
     
     st.write(f"### Projeto: {proj.nome_projeto}")
+
+    # --- INCREMENTO IA: ALERTA DE FASE E PENDÊNCIAS ---
+    fase_ia, docs_sugeridos = analisar_status_ia(proj)
+    st.info(f"🤖 **Insight de IA:** Com base no cronograma, o projeto deveria estar na fase: **{fase_ia}**.")
+    if docs_sugeridos:
+        st.warning(f"⚠️ **Documentos Críticos Pendentes/Esperados:** {', '.join(docs_sugeridos)}")
+
     tab1, tab2, tab3 = st.tabs(["🔍 Auditoria Técnica", "📜 Histórico", "📂 Evidências"])
     
     with tab1:
         novos_status = {}; total_e = 0; total_i = 0
         for fase, itens in METODOLOGIA.items():
-            # Se não houver itens detalhados no DB, usa o percentual da fase do projeto como fallback visual
             f_perc = (sum(1 for i in itens if status_map.get((fase, i), False)) / len(itens)) * 100
             
             with st.expander(f"{fase} - {f_perc:.0f}% Validado", expanded=(f_perc < 100)):
@@ -259,6 +285,7 @@ elif modo == "Dashboard Regional":
         )
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

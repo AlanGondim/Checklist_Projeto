@@ -70,6 +70,20 @@ MAPA_COLUNAS = {
     "Go Live": "go_live", "Operação Assistida": "operacao_assistida", "Finalização": "finalizacao"
 }
 
+# --- FUNÇÃO DE IA PARA ANÁLISE TEMPORAL ---
+def analisar_fase_ideal(p):
+    hoje = date.today()
+    try:
+        d_ini = datetime.strptime(p.data_inicio, '%Y-%m-%d').date()
+        d_prod = datetime.strptime(p.data_entrada_producao, '%Y-%m-%d').date()
+        d_fim = datetime.strptime(p.data_termino, '%Y-%m-%d').date()
+        
+        if hoje < d_ini: return "Pré-Início", ["TAP"]
+        elif d_ini <= hoje < d_prod: return "Workshop/Construção", ["Business Blue Print", "Carga Precursora"]
+        elif d_prod <= hoje < d_fim: return "Go Live/Operação Assistida", ["Ata de Go/No Go", "Termo de Aceite"]
+        else: return "Finalização", ["TEP", "Lições Aprendidas"]
+    except: return "Data N/D", []
+
 # --- POPUP DE AUDITORIA ---
 @st.dialog("📋 Auditoria de Rastreabilidade Integral", width="large")
 def popup_auditoria(projeto_id):
@@ -238,27 +252,46 @@ elif modo == "Dashboard Regional":
     st.markdown("<h2 style='color: #143264;'>📊 Dashboard de Governança</h2>", unsafe_allow_html=True)
     projs = session.query(Projeto).all()
     if projs:
-        # Lógica de cálculo dinâmico para a escala de progresso do dashboard
         df_list = []
         for p in projs:
             d = vars(p).copy()
             itens = session.query(StatusItem).filter(StatusItem.projeto_id == p.id).all()
-            if itens:
-                d['Progresso %'] = round((sum(1 for i in itens if i.entregue) / sum(len(v) for v in METODOLOGIA.values())) * 100, 1)
-            else:
-                d['Progresso %'] = 0.0
-            df_list.append(d)
+            total_m = sum(len(v) for v in METODOLOGIA.values())
+            entregues = sum(1 for i in itens if i.entregue)
+            valor_v = (entregues / total_m) * 100 if total_m > 0 else 0.0
+            d['Progresso %'] = round(valor_v, 1)
             
-        df = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
-        df_display = df.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
+            # LÓGICA DO FAROL DE CONFORMIDADE
+            hoje = date.today()
+            try:
+                d_fim = datetime.strptime(p.data_termino, '%Y-%m-%d').date()
+                if valor_v >= 100: d['Farol'] = "🟢 Conforme"
+                elif valor_v < 100 and hoje > d_fim: d['Farol'] = "🔴 Crítico (Atraso)"
+                else: d['Farol'] = "🟡 Em Andamento"
+            except: d['Farol'] = "⚪ Sem Data"
+
+            # Escala de cores solicitada
+            if valor_v <= 50: d['cor_prog'] = "red"
+            elif valor_v <= 75: d['cor_prog'] = "#FFD700"
+            else: d['cor_prog'] = "#143264"
+            
+            df_list.append(d)
+        
+        df_display = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
+        df_display = df_display.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
         
         selecao = st.dataframe(
-            df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'data_auditoria']], 
+            df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'Farol', 'cor_prog']], 
             use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
-            column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%", color="#143264")}
+            column_config={
+                "id": None, "cor_prog": None,
+                "Progresso %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%", color="cor_prog"),
+                "Farol": st.column_config.TextColumn("Conformidade (Farol)")
+            }
         )
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

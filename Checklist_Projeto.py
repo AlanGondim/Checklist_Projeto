@@ -184,21 +184,34 @@ if modo == "Checklist Operacional":
                     if res: concluidos += 1
                 perc_fases[fase] = (concluidos / len(itens)) * 100
 
-    # SPARKLINE COM LINHA CONECTORA MELHORADA
+   # --- SPARKLINE COMPLETO (Com linha e borda condicional) ---
+    st.markdown("<h3 style='font-size: 18px; color: #143264;'>🛤️ Linha do Tempo da Metodologia</h3>", unsafe_allow_html=True)
     st.markdown("""
         <style>
-        .timeline-wrapper { position: relative; display: flex; justify-content: space-between; align-items: center; margin: 40px 0; width: 100%; padding: 0 10px; }
-        .timeline-line { position: absolute; top: 50%; left: 0; right: 0; height: 4px; background-color: #143264; z-index: 1; transform: translateY(-1100%); }
-        .pie-circle { width: 45px; height: 45px; border-radius: 50%; z-index: 2; position: relative; background: white; margin: 0 auto; box-shadow: 0 0 0 4px white; }
+        .timeline-wrapper { position: relative; margin-bottom: 40px; padding-top: 10px; display: flex; justify-content: space-between; align-items: center; }
+        .timeline-line { position: absolute; top: 38px; left: 5%; right: 5%; height: 3px; background-color: #143264; z-index: 1; }
+        .pie-circle { 
+            width: 45px; height: 45px; border-radius: 50%; display: inline-block; 
+            position: relative; z-index: 2; background-color: white; 
+        }
         </style>
     """, unsafe_allow_html=True)
     
-    st.markdown("<div class='timeline-wrapper'><div class='timeline-line'></div>", unsafe_allow_html=True)
-    cols_v = st.columns(len(fases_lista))
+    st.markdown("<div class='timeline-wrapper'>", unsafe_allow_html=True)
+    st.markdown("<div class='timeline-line'></div>", unsafe_allow_html=True)
+    cols_visual = st.columns(len(fases_lista))
     for i, fase in enumerate(fases_lista):
-        v = perc_fases[fase]
-        cor = "#143264" if v > 0 else "#FFD700"
-        with cols_v[i]: st.markdown(f"<div style='text-align:center'><div class='pie-circle' style='background: conic-gradient(#143264 {v}%, #eee 0); border: 4px solid {cor}'></div><p style='font-size:10px; font-weight:bold;'>{fase}</p></div>", unsafe_allow_html=True)
+        valor = perc_fases[fase]
+        # Borda: Azul marinho se preenchido, Amarela se vazio
+        cor_borda = "#143264" if valor > 0 else "#FFD700"
+        with cols_visual[i]:
+            st.markdown(f"""
+                <div style='text-align: center; position: relative; z-index: 2;'>
+                    <div class='pie-circle' style='background: conic-gradient(#143264 {valor}%, #E0E0E0 0); border: 4px solid {cor_borda};'></div>
+                    <p style='font-size: 11px; font-weight: bold; color: #143264; margin-top: 5px;'>{fase}</p>
+                    <p style='font-size: 13px; color: #143264;'>{valor:.0f}%</p>
+                </div>
+            """, unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
     if st.button("💾 SALVAR NO HUB", use_container_width=True):
@@ -227,3 +240,4 @@ elif modo == "Dashboard Regional":
         df_display = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
         sel = st.dataframe(df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'Farol']], use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row", column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(format="%.1f%%", color="#143264")})
         if len(sel.selection.rows) > 0: popup_auditoria(int(df_display.iloc[sel.selection.rows[0]]['id']))
+

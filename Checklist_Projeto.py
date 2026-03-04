@@ -4,7 +4,7 @@ import numpy as np
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, desc, text, inspect
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from datetime import datetime
+from datetime import datetime, date # Importação corrigida para evitar NameError
 import os
 
 # --- DATABASE SETUP ---
@@ -70,40 +70,43 @@ MAPA_COLUNAS = {
     "Go Live": "go_live", "Operação Assistida": "operacao_assistida", "Finalização": "finalizacao"
 }
 
-# --- FUNÇÃO DE IA PARA ANÁLISE TEMPORAL ---
 def analisar_fase_ideal(p):
     hoje = date.today()
     try:
         d_ini = datetime.strptime(p.data_inicio, '%Y-%m-%d').date()
         d_prod = datetime.strptime(p.data_entrada_producao, '%Y-%m-%d').date()
         d_fim = datetime.strptime(p.data_termino, '%Y-%m-%d').date()
-        
         if hoje < d_ini: return "Pré-Início", ["TAP"]
         elif d_ini <= hoje < d_prod: return "Workshop/Construção", ["Business Blue Print", "Carga Precursora"]
         elif d_prod <= hoje < d_fim: return "Go Live/Operação Assistida", ["Ata de Go/No Go", "Termo de Aceite"]
         else: return "Finalização", ["TEP", "Lições Aprendidas"]
     except: return "Data N/D", []
 
+def get_status_itens(projeto_id):
+    itens = session.query(StatusItem).filter(StatusItem.projeto_id == projeto_id).all()
+    return {(i.fase, i.item): bool(i.entregue) for i in itens}
+
 # --- POPUP DE AUDITORIA ---
 @st.dialog("📋 Auditoria de Rastreabilidade Integral", width="large")
 def popup_auditoria(projeto_id):
     proj = session.query(Projeto).filter(Projeto.id == projeto_id).first()
-    
-    # BUSCA INFORMAÇÃO JÁ EXISTENTE (Evita retrabalho)
-    itens_salvos = session.query(StatusItem).filter(StatusItem.projeto_id == projeto_id).all()
-    status_map = {(i.fase, i.item): bool(i.entregue) for i in itens_salvos}
+    status_map = get_status_itens(proj.id)
     
     st.write(f"### Projeto: {proj.nome_projeto}")
+    fase_sugerida, docs_obrigatorios = analisar_fase_ideal(proj)
+    st.warning(f"🤖 **Análise de IA:** Fase Sugerida: **{fase_sugerida}**. Documentos Críticos: {', '.join(docs_obrigatorios)}.")
+
     tab1, tab2, tab3 = st.tabs(["🔍 Auditoria Técnica", "📜 Histórico", "📂 Evidências"])
     
     with tab1:
         novos_status = {}; total_e = 0; total_i = 0
         for fase, itens in METODOLOGIA.items():
-            # Se não houver itens detalhados no DB, usa o percentual da fase do projeto como fallback visual
-            f_perc = (sum(1 for i in itens if status_map.get((fase, i), False)) / len(itens)) * 100
+            f_salvos = sum(1 for i in itens if status_map.get((fase, i), False))
+            f_perc = (f_salvos / len(itens)) * 100
             
             with st.expander(f"{fase} - {f_perc:.0f}% Validado", expanded=(f_perc < 100)):
-                if st.button(f"✅ Validar Conformidade Total: {fase}", key=f"aud_all_{fase}"):
+                # LINHA 82: Funcionalidade de marcar todos na Auditoria Técnica
+                if st.button(f"✅ Marcar todos em {fase}", key=f"aud_all_{fase}"):
                     for item in itens:
                         session.merge(StatusItem(projeto_id=proj.id, fase=fase, item=item, entregue=1))
                     session.commit()
@@ -119,13 +122,12 @@ def popup_auditoria(projeto_id):
         
         p_medio = (total_e / total_i) * 100
         if p_medio == 100:
-            st.success("🌟 **PROJETO EM CONFORMIDADE INTEGRAL!**")
-            st.balloons()
+            st.success("🌟 **PROJETO EM CONFORMIDADE INTEGRAL!**"); st.balloons()
         
         st.divider()
         c1, c2 = st.columns(2)
         aud = c1.text_input("Analista Auditor MV", value=proj.responsavel_auditoria or "")
-        data_aud = c2.date_input("Data da Auditoria", value=datetime.now(), format="DD/MM/YYYY")
+        data_aud = c2.date_input("Data da Auditoria", value=date.today(), format="DD/MM/YYYY")
         
         if st.button("🚀 CONSOLIDAR AUDITORIA", use_container_width=True):
             session.query(StatusItem).filter(StatusItem.projeto_id == proj.id).delete()
@@ -149,7 +151,7 @@ def popup_auditoria(projeto_id):
         up = st.file_uploader("Anexar Evidência", key="up_audit")
         if st.button("Salvar Arquivo"):
             if up:
-                path = f"evidencias_audit/{proj.id}_{up.name}"
+                path = f"evidencias_audit/{proj.id}_{f_ev}_{up.name}"
                 with open(path, "wb") as f: f.write(up.getbuffer())
                 session.add(Evidencia(projeto_id=proj.id, fase=f_ev, nome_arquivo=up.name, caminho=path))
                 session.commit(); st.success("Arquivo Salvo!")
@@ -160,35 +162,25 @@ modo = st.sidebar.radio("Navegação", ["Checklist Operacional", "Dashboard Regi
 
 if modo == "Checklist Operacional":
     st.markdown("<h2 style='color: #143264;'>🏛️ Hub de Inteligência | Operação</h2>", unsafe_allow_html=True)
-    
-    # --- ORGANIZAÇÃO DOS CAMPOS EM COLUNAS (3 POR COLUNA) ---
     with st.container():
         col1, col2, col3 = st.columns(3)
-        
-        # Linha 1
         nome_p = col1.text_input("Nome do Projeto")
         oportunidade = col2.text_input("Oportunidade (CRM)")
         gp_p = col3.text_input("Gerente do Projeto")
-        
-        # Linha 2
-        regional_p = col1.selectbox("Regional", [" ", "Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
-        horas_cont = col2.number_input("Horas Contratadas", min_value=0.0, step=10.0)
-        d_inicio = col3.date_input("Data de Início", format="DD/MM/YYYY")
-        
-        # Linha 3
-        d_termino = col1.date_input("Data de Término", format="DD/MM/YYYY")
-        d_producao = col2.date_input("Data de Entrada em Produção", format="DD/MM/YYYY")
-        d_auditoria_cad = col3.date_input("Data da Auditoria", format="DD/MM/YYYY")
-        
-        # Linha 4 (Campo restante centralizado ou na primeira coluna)
-        resp_auditoria_cad = col1.text_input("Responsável pela Auditoria")
+        col4, col5, col6 = st.columns(3)
+        regional_p = col4.selectbox("Regional", [" ", "Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
+        horas_cont = col5.number_input("Horas Contratadas", min_value=0.0, step=10.0)
+        d_inicio = col6.date_input("Data de Início", format="DD/MM/YYYY")
+        col7, col8, col9 = st.columns(3)
+        d_termino = col7.date_input("Data de Término", format="DD/MM/YYYY")
+        d_producao = col8.date_input("Data de Entrada em Produção", format="DD/MM/YYYY")
+        d_auditoria_cad = col9.date_input("Data da Auditoria", format="DD/MM/YYYY")
+        resp_auditoria_cad = st.text_input("Responsável pela Auditoria")
 
     fases_lista = list(METODOLOGIA.keys())
-    perc_fases = {}
-    
+    perc_fases = {}; checks_operacionais = {}
     st.markdown("---")
     tabs = st.tabs(fases_lista)
-    checks_operacionais = {} # Para salvar o estado detalhado já no primeiro clique
 
     for i, fase in enumerate(fases_lista):
         with tabs[i]:
@@ -209,44 +201,24 @@ if modo == "Checklist Operacional":
                     if res: concluidos += 1
                 perc_fases[fase] = (concluidos / len(itens)) * 100
 
-    # --- SPARKLINE COMPLETO (Com linha e borda condicional) ---
     st.markdown("<h3 style='font-size: 18px; color: #143264;'>🛤️ Linha do Tempo da Metodologia</h3>", unsafe_allow_html=True)
-    st.markdown("""
-        <style>
-        .timeline-wrapper { position: relative; margin-bottom: 40px; padding-top: 10px; display: flex; justify-content: space-between; align-items: center; }
-        .timeline-line { position: absolute; top: 38px; left: 5%; right: 5%; height: 3px; background-color: #143264; z-index: 1; }
-        .pie-circle { 
-            width: 45px; height: 45px; border-radius: 50%; display: inline-block; 
-            position: relative; z-index: 2; background-color: white; 
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("<div class='timeline-wrapper'>", unsafe_allow_html=True)
-    st.markdown("<div class='timeline-line'></div>", unsafe_allow_html=True)
+    st.markdown("""<style>.timeline-wrapper { position: relative; margin-bottom: 40px; padding-top: 10px; display: flex; justify-content: space-between; align-items: center; } .timeline-line { position: absolute; top: 38px; left: 5%; right: 5%; height: 3px; background-color: #143264; z-index: 1; } .pie-circle { width: 45px; height: 45px; border-radius: 50%; display: inline-block; position: relative; z-index: 2; background-color: white; }</style>""", unsafe_allow_html=True)
+    st.markdown("<div class='timeline-wrapper'><div class='timeline-line'></div>", unsafe_allow_html=True)
     cols_visual = st.columns(len(fases_lista))
     for i, fase in enumerate(fases_lista):
         valor = perc_fases[fase]
-        # Borda: Azul marinho se preenchido, Amarela se vazio
         cor_borda = "#143264" if valor > 0 else "#FFD700"
         with cols_visual[i]:
-            st.markdown(f"""
-                <div style='text-align: center; position: relative; z-index: 2;'>
-                    <div class='pie-circle' style='background: conic-gradient(#143264 {valor}%, #E0E0E0 0); border: 4px solid {cor_borda};'></div>
-                    <p style='font-size: 11px; font-weight: bold; color: #143264; margin-top: 5px;'>{fase}</p>
-                    <p style='font-size: 13px; color: #143264;'>{valor:.0f}%</p>
-                </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align: center; position: relative; z-index: 2;'><div class='pie-circle' style='background: conic-gradient(#143264 {valor}%, #E0E0E0 0); border: 4px solid {cor_borda};'></div><p style='font-size: 11px; font-weight: bold; color: #143264; margin-top: 5px;'>{fase}</p><p style='font-size: 13px; color: #143264;'>{valor:.0f}%</p></div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
     if st.button("💾 SALVAR NO HUB", use_container_width=True):
         if nome_p and gp_p:
-            novo = Projeto(nome_projeto=nome_p, gerente_projeto=gp_p, regional=regional_p, **{MAPA_COLUNAS[f]: v for f, v in perc_fases.items()})
+            novo = Projeto(nome_projeto=nome_p, gerente_projeto=gp_p, regional=regional_p, oportunidade=oportunidade, data_inicio=str(d_inicio), data_entrada_producao=str(d_producao), data_termino=str(d_termino), responsavel_auditoria=resp_auditoria_cad, **{MAPA_COLUNAS[f]: v for f, v in perc_fases.items()})
             session.add(novo); session.flush()
-            # SALVA O DETALHAMENTO IMEDIATAMENTE PARA O AUDITOR NÃO TER RETRABALHO
             for (f, i), v in checks_operacionais.items():
                 session.add(StatusItem(projeto_id=novo.id, fase=f, item=i, entregue=1 if v else 0))
-            session.commit(); st.success("Projeto e Checklist salvos!")
+            session.commit(); st.success("Dossiê salvo!"); st.rerun()
 
 elif modo == "Dashboard Regional":
     st.markdown("<h2 style='color: #143264;'>📊 Dashboard de Governança</h2>", unsafe_allow_html=True)
@@ -260,8 +232,6 @@ elif modo == "Dashboard Regional":
             entregues = sum(1 for i in itens if i.entregue)
             valor_v = (entregues / total_m) * 100 if total_m > 0 else 0.0
             d['Progresso %'] = round(valor_v, 1)
-            
-            # LÓGICA DO FAROL DE CONFORMIDADE
             hoje = date.today()
             try:
                 d_fim = datetime.strptime(p.data_termino, '%Y-%m-%d').date()
@@ -269,38 +239,10 @@ elif modo == "Dashboard Regional":
                 elif valor_v < 100 and hoje > d_fim: d['Farol'] = "🔴 Crítico (Atraso)"
                 else: d['Farol'] = "🟡 Em Andamento"
             except: d['Farol'] = "⚪ Sem Data"
-
-            # Escala de cores solicitada
-            if valor_v <= 50: d['cor_prog'] = "red"
-            elif valor_v <= 75: d['cor_prog'] = "#FFD700"
-            else: d['cor_prog'] = "#143264"
-            
+            d['cor_prog'] = "red" if valor_v <= 50 else "#FFD700" if valor_v <= 75 else "#143264"
             df_list.append(d)
         
-        df_display = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
-        df_display = df_display.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
-        
-        selecao = st.dataframe(
-            df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'Farol', 'cor_prog']], 
-            use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
-            column_config={
-                "id": None, "cor_prog": None,
-                "Progresso %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%", color="cor_prog"),
-                "Farol": st.column_config.TextColumn("Conformidade (Farol)")
-            }
-        )
+        df_display = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto']).rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
+        selecao = st.dataframe(df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'Farol', 'cor_prog']], use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row", column_config={"id": None, "cor_prog": None, "Progresso %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%", color="cor_prog"), "Farol": st.column_config.TextColumn("Conformidade (Farol)")})
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
-
-
-
-
-
-
-
-
-
-
-
-
-

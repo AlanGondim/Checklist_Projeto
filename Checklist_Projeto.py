@@ -236,59 +236,30 @@ if modo == "Checklist Operacional":
 
 elif modo == "Dashboard Regional":
     st.markdown("<h2 style='color: #143264;'>📊 Dashboard de Governança</h2>", unsafe_allow_html=True)
-    
-    # Legenda Racional de Cores
-    st.markdown("""
-        <div style='display: flex; gap: 20px; font-size: 12px; margin-bottom: 10px;'>
-            <span style='color: red;'>●</span> Até 50% (Crítico)
-            <span style='color: #FFD700;'>●</span> 51% a 75% (Atenção)
-            <span style='color: #143264;'>●</span> > 75% (Conforme)
-        </div>
-    """, unsafe_allow_html=True)
-
     projs = session.query(Projeto).all()
     if projs:
+        # Lógica de cálculo dinâmico para a escala de progresso do dashboard
         df_list = []
         for p in projs:
             d = vars(p).copy()
             itens = session.query(StatusItem).filter(StatusItem.projeto_id == p.id).all()
-            total_m = sum(len(v) for v in METODOLOGIA.values())
-            entregues = sum(1 for i in itens if i.entregue)
-            valor_perc = (entregues / total_m) * 100 if total_m > 0 else 0.0
-            d['Progresso %'] = round(valor_perc, 1)
-            
-            # Remove chaves internas do SQLAlchemy para não sujar o DataFrame
-            d.pop('_sa_instance_state', None)
+            if itens:
+                d['Progresso %'] = round((sum(1 for i in itens if i.entregue) / sum(len(v) for v in METODOLOGIA.values())) * 100, 1)
+            else:
+                d['Progresso %'] = 0.0
             df_list.append(d)
+            
+        df = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
+        df_display = df.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
         
-        df_display = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
-        
-        # Ordenação por progresso
-        df_render = df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'data_auditoria']]
-
-        # Renderização estável
         selecao = st.dataframe(
-            df_render, 
-            use_container_width=True, 
-            hide_index=True, 
-            on_select="rerun", 
-            selection_mode="single-row", 
-            column_config={
-                "id": None,
-                "Progresso %": st.column_config.ProgressColumn(
-                    "Progresso %",
-                    min_value=0, 
-                    max_value=100, 
-                    format="%.1f%%",
-                    color="#143264" # Cor fixa para evitar erro de referência no Cloud
-                ),
-                "data_auditoria": "Última Auditoria"
-            }
+            df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'data_auditoria']], 
+            use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
+            column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%", color="#143264")}
         )
-        
         if len(selecao.selection.rows) > 0:
-            idx = selecao.selection.rows[0]
-            popup_auditoria(int(df_render.iloc[idx]['id']))
+            popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

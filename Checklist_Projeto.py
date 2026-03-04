@@ -89,11 +89,16 @@ def popup_auditoria(projeto_id):
             f_perc = (sum(1 for i in itens if status_map.get((fase, i), False)) / len(itens)) * 100
             
             with st.expander(f"{fase} - {f_perc:.0f}% Validado", expanded=(f_perc < 100)):
+                if st.button(f"✅ Validar Conformidade Total: {fase}", key=f"aud_all_{fase}"):
+                    for item in itens:
+                        session.merge(StatusItem(projeto_id=proj.id, fase=fase, item=item, entregue=1))
+                    session.commit()
+                    st.rerun()
+
                 st.progress(f_perc / 100)
                 for item in itens:
-                    # Carrega o que foi marcado no Checklist Operacional ou Auditoria anterior
                     val_db = status_map.get((fase, item), False)
-                    res = st.checkbox(item, value=val_db, key=f"aud_{proj.id}_{fase}_{item}")
+                    res = st.checkbox(item, value=val_db, key=f"aud_chk_{proj.id}_{fase}_{item}")
                     novos_status[(fase, item)] = res
                     if res: total_e += 1
                     total_i += 1
@@ -254,6 +259,7 @@ elif modo == "Dashboard Regional":
         )
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

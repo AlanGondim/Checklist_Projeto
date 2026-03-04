@@ -227,7 +227,7 @@ if modo == "Checklist Operacional":
 
     if st.button("💾 SALVAR NO HUB", use_container_width=True):
         if nome_p and gp_p:
-            novo = Projeto(nome_projeto=nome_p, gerente_projeto=gp_p, regional=reg_p, **{MAPA_COLUNAS[f]: v for f, v in perc_fases.items()})
+            novo = Projeto(nome_projeto=nome_p, gerente_projeto=gp_p, regional=regional_p, **{MAPA_COLUNAS[f]: v for f, v in perc_fases.items()})
             session.add(novo); session.flush()
             # SALVA O DETALHAMENTO IMEDIATAMENTE PARA O AUDITOR NÃO TER RETRABALHO
             for (f, i), v in checks_operacionais.items():
@@ -259,6 +259,7 @@ elif modo == "Dashboard Regional":
         )
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

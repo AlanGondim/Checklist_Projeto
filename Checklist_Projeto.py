@@ -153,7 +153,7 @@ if modo == "Checklist Operacional":
         
         # Linha 2
         regional_p = col1.selectbox("Regional", ["Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte", "Internacional"])
-        horas_cont = col2.number_input("Horas Contratadas", min_value=0.0)
+        horas_cont = col2.number_input("Horas Contratadas", min_value=0.0, step=10.0)
         d_inicio = col3.date_input("Data de Início", format="DD/MM/YYYY")
         
         # Linha 3
@@ -250,6 +250,7 @@ elif modo == "Dashboard Regional":
         )
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, desc, text, inspect
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, desc, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime, date
@@ -31,25 +31,18 @@ class Projeto(Base):
     go_live = Column(Float, default=0.0); operacao_assistida = Column(Float, default=0.0)
     finalizacao = Column(Float, default=0.0)
 
+class StatusItem(Base):
+    __tablename__ = 'status_itens_detalhado'
+    id = Column(Integer, primary_key=True)
+    projeto_id = Column(Integer); fase = Column(String)
+    item = Column(String); entregue = Column(Integer)
+
 class AuditoriaHistorico(Base):
     __tablename__ = 'historico_auditorias'
     id = Column(Integer, primary_key=True)
     projeto_id = Column(Integer); data_auditoria = Column(String)
     responsavel = Column(String); progresso_total = Column(Float)
     timestamp = Column(DateTime, default=datetime.now)
-
-class Evidencia(Base):
-    __tablename__ = 'evidencias_arquivos'
-    id = Column(Integer, primary_key=True)
-    projeto_id = Column(Integer); fase = Column(String)
-    nome_arquivo = Column(String); caminho = Column(String)
-    timestamp = Column(DateTime, default=datetime.now)
-
-class StatusItem(Base):
-    __tablename__ = 'status_itens_detalhado'
-    id = Column(Integer, primary_key=True)
-    projeto_id = Column(Integer); fase = Column(String)
-    item = Column(String); entregue = Column(Integer)
 
 Base.metadata.create_all(engine)
 
@@ -90,28 +83,25 @@ def analisar_status_ia(proj):
 @st.dialog("📋 Auditoria de Rastreabilidade Integral", width="large")
 def popup_auditoria(projeto_id):
     proj = session.query(Projeto).filter(Projeto.id == projeto_id).first()
-    itens_salvos = session.query(StatusItem).filter(StatusItem.projeto_id == projeto_id).all()
-    status_map = {(i.fase, i.item): bool(i.entregue) for i in itens_salvos}
+    itens_db = session.query(StatusItem).filter(StatusItem.projeto_id == projeto_id).all()
+    status_map = {(i.fase, i.item): bool(i.entregue) for i in itens_db}
     
     st.markdown(f"### 📑 Dossiê do Projeto: {proj.nome_projeto}")
     
-    # --- MELHORIA: TODAS AS INFORMAÇÕES DO PROJETO NO PADRÃO DD/MM/YYYY ---
     with st.container(border=True):
         c1, c2, c3 = st.columns(3)
         c1.write(f"**CRM:** {proj.oportunidade}")
         c2.write(f"**Gerente:** {proj.gerente_projeto}")
         c3.write(f"**Regional:** {proj.regional}")
-        
         c4, c5, c6 = st.columns(3)
         c4.write(f"**Horas:** {proj.horas_contratadas}h")
         c5.write(f"**Início:** {format_date_br(proj.data_inicio)}")
         c6.write(f"**Término:** {format_date_br(proj.data_termino)}")
-        
         c7, c8, c9 = st.columns(3)
-        c7.write(f"**Entrada Produção:** {format_date_br(proj.data_entrada_producao)}")
+        c7.write(f"**Produção:** {format_date_br(proj.data_entrada_producao)}")
         c8.write(f"**Status IA:** {analisar_status_ia(proj)[0]}")
 
-    tab1, tab2, tab3 = st.tabs(["🔍 Auditoria Técnica", "📜 Histórico", "📂 Evidências"])
+    tab1, tab2 = st.tabs(["🔍 Auditoria Técnica", "📜 Histórico"])
     
     with tab1:
         novos_status = {}; total_e = 0; total_i = 0
@@ -120,13 +110,17 @@ def popup_auditoria(projeto_id):
             f_perc = (f_salvos / len(itens)) * 100
             
             with st.expander(f"{fase} - {f_perc:.0f}% Validado", expanded=(f_perc < 100)):
-                # BOTÃO DINÂMICO MARCAR/DESMARCAR
+                # LÓGICA CORRIGIDA: BOTÃO MARCAR/DESMARCAR AUDITORIA
+                col_btn, _ = st.columns([1, 2])
                 label_btn = "❌ Desmarcar todos" if f_perc == 100 else "✅ Marcar todos"
-                if st.button(label_btn, key=f"aud_all_{fase}"):
+                if col_btn.button(label_btn, key=f"aud_btn_{fase}"):
                     val_to_set = 0 if f_perc == 100 else 1
+                    # Remove anteriores e insere novos estados para garantir sincronia
+                    session.query(StatusItem).filter(StatusItem.projeto_id == proj.id, StatusItem.fase == fase).delete()
                     for item in itens:
-                        session.merge(StatusItem(projeto_id=proj.id, fase=fase, item=item, entregue=val_to_set))
-                    session.commit(); st.rerun()
+                        session.add(StatusItem(projeto_id=proj.id, fase=fase, item=item, entregue=val_to_set))
+                    session.commit()
+                    st.rerun()
 
                 st.progress(f_perc / 100)
                 for item in itens:
@@ -147,18 +141,9 @@ def popup_auditoria(projeto_id):
             proj.data_auditoria = str(date.today())
             session.commit(); st.success("Dossiê atualizado!"); st.rerun()
 
-    # (Tabs Histórico e Evidências preservadas...)
     with tab2:
         hist = session.query(AuditoriaHistorico).filter(AuditoriaHistorico.projeto_id == proj.id).order_by(desc(AuditoriaHistorico.timestamp)).all()
         if hist: st.table(pd.DataFrame([{"Data": h.data_auditoria, "Auditor": h.responsavel, "Performance": f"{h.progresso_total:.1f}%"} for h in hist]))
-    with tab3:
-        f_ev = st.selectbox("Fase:", list(METODOLOGIA.keys()))
-        up = st.file_uploader("Evidência")
-        if st.button("Salvar") and up:
-            path = f"evidencias_audit/{proj.id}_{f_ev}_{up.name}"
-            with open(path, "wb") as f: f.write(up.getbuffer())
-            session.add(Evidencia(projeto_id=proj.id, fase=f_ev, nome_arquivo=up.name, caminho=path))
-            session.commit(); st.success("Salvo!")
 
 # --- INTERFACE PRINCIPAL ---
 st.set_page_config(page_title="Hub MV", layout="wide")
@@ -184,27 +169,27 @@ if modo == "Checklist Operacional":
             if i > 0 and perc_fases.get(fases_lista[i-1], 0) < 100:
                 st.error("Fase Bloqueada"); perc_fases[fase] = 0.0
             else:
-                # LOGICA MARCAR/DESMARCAR OPERACIONAL
-                concluidos_at = sum(1 for it in METODOLOGIA[fase] if st.session_state.get(f"chk_op_{fase}_{it}", False))
+                # LÓGICA MARCAR/DESMARCAR OPERACIONAL
+                concluidos_at = sum(1 for it in METODOLOGIA[fase] if st.session_state.get(f"op_chk_{fase}_{it}", False))
                 label_op = "❌ Desmarcar todos" if concluidos_at == len(METODOLOGIA[fase]) else "⚡ Marcar todos"
-                if st.button(label_op, key=f"op_all_{fase}"):
+                if st.button(label_op, key=f"op_btn_{fase}"):
                     val_to_set = False if concluidos_at == len(METODOLOGIA[fase]) else True
-                    for item in METODOLOGIA[fase]: st.session_state[f"chk_op_{fase}_{item}"] = val_to_set
+                    for item in METODOLOGIA[fase]: st.session_state[f"op_chk_{fase}_{item}"] = val_to_set
                     st.rerun()
                 
                 concluidos = 0; itens = METODOLOGIA[fase]; cols = st.columns(2)
                 for item in itens:
-                    res = cols[itens.index(item)%2].checkbox(item, key=f"chk_op_{fase}_{item}")
+                    res = cols[itens.index(item)%2].checkbox(item, key=f"op_chk_{fase}_{item}")
                     checks_ops[(fase, item)] = res
                     if res: concluidos += 1
                 perc_fases[fase] = (concluidos / len(itens)) * 100
 
-    # SPARKLINE COM LINHA CONECTORA AZUL MARINHO
+    # SPARKLINE COM LINHA CONECTORA MELHORADA
     st.markdown("""
         <style>
-        .timeline-wrapper { position: relative; display: flex; justify-content: space-between; align-items: center; margin: 40px 0; width: 100%; }
-        .timeline-line { position: absolute; top: 22px; left: 0; right: 0; height: 4px; background-color: #143264; z-index: 1; }
-        .pie-circle { width: 45px; height: 45px; border-radius: 50%; z-index: 2; position: relative; background: white; margin: 0 auto; }
+        .timeline-wrapper { position: relative; display: flex; justify-content: space-between; align-items: center; margin: 40px 0; width: 100%; padding: 0 10px; }
+        .timeline-line { position: absolute; top: 50%; left: 0; right: 0; height: 4px; background-color: #143264; z-index: 1; transform: translateY(-1100%); }
+        .pie-circle { width: 45px; height: 45px; border-radius: 50%; z-index: 2; position: relative; background: white; margin: 0 auto; box-shadow: 0 0 0 4px white; }
         </style>
     """, unsafe_allow_html=True)
     

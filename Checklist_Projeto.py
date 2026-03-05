@@ -70,6 +70,20 @@ MAPA_COLUNAS = {
     "Go Live": "go_live", "Operação Assistida": "operacao_assistida", "Finalização": "finalizacao"
 }
 
+# --- MELHORIA IA: LÓGICA DE STATUS ---
+def calcular_status_ia(d_ini, d_prod, d_fim):
+    try:
+        hoje = date.today()
+        ini = datetime.strptime(d_ini, '%Y-%m-%d').date()
+        prod = datetime.strptime(d_prod, '%Y-%m-%d').date()
+        fim = datetime.strptime(d_fim, '%Y-%m-%d').date()
+        if hoje < ini: return "🔵 Planejamento"
+        if hoje >= fim: return "✅ Finalizado"
+        if hoje >= prod: return "🚀 Operação Assistida"
+        return "⚙️ Em Implantação"
+    except:
+        return "⚪ Sem Dados"
+
 # --- POPUP DE AUDITORIA ---
 @st.dialog("📋 Auditoria de Rastreabilidade Integral", width="large")
 def popup_auditoria(projeto_id):
@@ -247,8 +261,7 @@ elif modo == "Dashboard Regional":
         c1, c2, c3 = st.columns([2, 2, 1])
         data_range = c1.date_input("Período de Auditoria", [date.today().replace(day=1), date.today()])
         fase_filtro = c2.multiselect("Filtrar por Fase", list(METODOLOGIA.keys()))
-        if c3.button("Limpar Filtros"): st.rerun()
-   
+        if c3.button("Limpar Filtros"): st.rerun()   
     projs = session.query(Projeto).all()
     if projs:
         df_list = []
@@ -294,6 +307,7 @@ elif modo == "Dashboard Regional":
         )       
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

@@ -259,7 +259,7 @@ elif modo == "Dashboard Regional":
    # --- SEÇÃO DE FILTROS ---
     with st.expander("🔍 Filtros de Consulta e Apuração", expanded=True):
         c1, c2, c3 = st.columns([2, 2, 1])
-        data_range = c1.date_input("Período de Auditoria", [date.today().replace(day=1), date.today()])
+        data_range = c1.date_input("Período de Auditoria", [date.today().replace(day=1), date.today(), format="DD/MM/YYYY"])
         fase_filtro = c2.multiselect("Filtrar por Fase", list(METODOLOGIA.keys()))
         if c3.button("Limpar Filtros"): st.rerun()   
     projs = session.query(Projeto).all()
@@ -316,6 +316,7 @@ elif modo == "Dashboard Regional":
         )       
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

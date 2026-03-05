@@ -267,25 +267,34 @@ elif modo == "Dashboard Regional":
         df_list = []
         for p in projs:
             d = vars(p).copy()
-            # Busca última auditoria no histórico para corrigir o "None"
             ultima_aud = session.query(AuditoriaHistorico).filter(AuditoriaHistorico.projeto_id == p.id).order_by(desc(AuditoriaHistorico.timestamp)).first()
-            d['data_auditoria'] = ultima_aud.data_auditoria if ultima_aud else "Não Auditado"
+            
+            # Correção da data_auditoria formatada para exibição
+            d['data_aud_raw'] = ultima_aud.data_auditoria if ultima_aud else "9999-99-99" # Para filtro
+            d['data_auditoria'] = datetime.strptime(ultima_aud.data_auditoria, '%Y-%m-%d').strftime('%d/%m/%Y') if ultima_aud else "Não Auditado"
 
           
             # Cálculo de Progresso
             itens = session.query(StatusItem).filter(StatusItem.projeto_id == p.id).all()
             d['Progresso %'] = round((sum(1 for i in itens if i.entregue) / sum(len(v) for v in METODOLOGIA.values())) * 100, 1) if itens else 0.0
-            
-            # IA de Status
+            # IA Status
             d['Status IA'] = calcular_status_ia(p.data_inicio, p.data_entrada_producao, p.data_termino)
             df_list.append(d)
            
+        #Aplicar filtros no Dataframe        
         df = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
-     
-        # Aplicar Filtros no DataFrame
         if len(data_range) == 2:
-            df = df[(df['data_auditoria'] >= str(data_range[0])) & (df['data_auditoria'] <= str(data_range[1])) | (df['data_auditoria'] == "Não Auditado")]
+            df = df[(df['data_aud_raw'] >= str(data_range[0])) & (df['data_aud_raw'] <= str(data_range[1])) | (df['data_auditoria'] == "Não Auditado")]
 
+        st.markdown(f"### 📈 Projetos Encontrados: {len(df)}")
+        selecao = st.dataframe(
+            df[['id', 'nome_projeto', 'gerente_projeto', 'Status IA', 'Progresso %', 'data_auditoria']], 
+            use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
+            column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(format="%.1f%%", color="#143264")}
+        )
+        if len(selecao.selection.rows) > 0:
+            popup_auditoria(int(df.iloc[selecao.selection.rows[0]]['id']))
+        
         # Apuração de Resultados
         st.markdown("### 📈 Apuração de Resultados")
         m1, m2, m3 = st.columns(3)
@@ -307,6 +316,7 @@ elif modo == "Dashboard Regional":
         )       
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

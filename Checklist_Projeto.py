@@ -278,26 +278,36 @@ if modo == "Checklist Operacional":
 elif modo == "Dashboard Regional":
     st.markdown("<h2 style='color: #143264;'>📊 Dashboard de Governança</h2>", unsafe_allow_html=True)
    
-    # --- LÓGICA DO BOTÃO LIMPAR FILTROS ---
-    if "data_range" not in st.session_state:
-        st.session_state.data_range = [date.today().replace(day=1), date.today()]
-    if "fases_selected" not in st.session_state:
-        st.session_state.fases_selected = []
+  # --- LÓGICA DE FILTROS BLINDADA ---
+    def reset_filters():
+        st.session_state.d_range_key = [date.today().replace(day=1), date.today()]
+        st.session_state.f_selected_key = []
 
-    def limpar_filtros():
-        st.session_state.data_range = [date.today().replace(day=1), date.today()]
-        st.session_state.fases_selected = []
+    if 'd_range_key' not in st.session_state:
+        st.session_state.d_range_key = [date.today().replace(day=1), date.today()]
+    if 'f_selected_key' not in st.session_state:
+        st.session_state.f_selected_key = []
 
-    with st.expander("🔍 Filtros de Consulta e Apuração", expanded=True):
+    with st.expander("🔍 Filtros de Consulta", expanded=True):
         c1, c2, c3 = st.columns([2, 2, 1])
-        data_range = c1.date_input("Período de Auditoria", value=st.session_state.data_range, format="DD/MM/YYYY", key="data_range_input")
-        st.session_state.data_range = data_range # Sincroniza
         
-        fase_filtro = c2.multiselect("Filtrar por Fase", list(METODOLOGIA.keys()), default=st.session_state.fases_selected, key="fase_filtro_input")
-        st.session_state.fases_selected = fase_filtro # Sincroniza
+        # O uso do key direto no session_state garante a limpeza funcional
+        filtro_data = c1.date_input(
+            "Período de Auditoria", 
+            value=st.session_state.d_range_key, 
+            format="DD/MM/YYYY", 
+            key="d_range_key"
+        )
+        
+        filtro_fase = c2.multiselect(
+            "Filtrar Fase", 
+            list(METODOLOGIA.keys()), 
+            default=st.session_state.f_selected_key, 
+            key="f_selected_key"
+        )
         
         c3.markdown("<br>", unsafe_allow_html=True)
-        c3.button("Limpar Filtros", on_click=limpar_filtros, use_container_width=True)
+        c3.button("Limpar Filtros", on_click=reset_filters, use_container_width=True)
     
     projs = session.query(Projeto).all()
     if projs:
@@ -357,6 +367,7 @@ elif modo == "Dashboard Regional":
         )       
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

@@ -284,20 +284,18 @@ elif modo == "Dashboard Regional":
     if "fases_selected" not in st.session_state:
         st.session_state.fases_selected = []
 
-    def limpar_filtros():
-        st.session_state.data_range = [date.today().replace(day=1), date.today()]
-        st.session_state.fases_selected = []
+    def reset_filters():
+        st.session_state.d_range = [date.today().replace(day=1), date.today()]
+        st.session_state.f_selected = []
 
-    with st.expander("🔍 Filtros de Consulta e Apuração", expanded=True):
+    if 'd_range' not in st.session_state: reset_filters()
+
+    with st.expander("🔍 Filtros de Consulta", expanded=True):
         c1, c2, c3 = st.columns([2, 2, 1])
-        data_range = c1.date_input("Período de Auditoria", value=st.session_state.data_range, format="DD/MM/YYYY", key="data_range_input")
-        st.session_state.data_range = data_range # Sincroniza
-        
-        fase_filtro = c2.multiselect("Filtrar por Fase", list(METODOLOGIA.keys()), default=st.session_state.fases_selected, key="fase_filtro_input")
-        st.session_state.fases_selected = fase_filtro # Sincroniza
-        
+        data_range = c1.date_input("Período", value=st.session_state.d_range, format="DD/MM/YYYY", key="d_range")
+        fase_filtro = c2.multiselect("Filtrar Fase", list(METODOLOGIA.keys()), default=st.session_state.f_selected, key="f_selected")
         c3.markdown("<br>", unsafe_allow_html=True)
-        c3.button("Limpar Filtros", on_click=limpar_filtros, use_container_width=True)
+        c3.button("Limpar Filtros", on_click=reset_filters, use_container_width=True)
     
     projs = session.query(Projeto).all()
     if projs:
@@ -320,21 +318,13 @@ elif modo == "Dashboard Regional":
           
         df = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
 
-        # Filtro de Data
-        if len(data_range) == 2:
-            df = df[(df['data_aud_raw'] >= str(data_range[0])) & (df['data_aud_raw'] <= str(data_range[1])) | (df['data_auditoria'] == "Não Auditado")]
+      # Aplicar filtros (Apenas se o range tiver 2 datas selecionadas)
+        if len(st.session_state.d_range) == 2:
+            df = df[(df['data_raw'] >= str(st.session_state.d_range[0])) & (df['data_raw'] <= str(st.session_state.d_range[1])) | (df['data_auditoria'] == "N/A")]
+        if st.session_state.f_selected:
+            df = df[df['Status IA'].apply(lambda x: any(f in x for f in st.session_state.f_selected))]
 
-        st.markdown(f"### 📈 Projetos Encontrados: {len(df)}")
-        selecao = st.dataframe(
-            df[['id', 'nome_projeto', 'gerente_projeto', 'Status IA', 'Progresso %', 'data_auditoria']], 
-            use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
-            column_config={
-                "id": None, 
-                "Progresso %": st.column_config.ProgressColumn(format="%.1f%%", color="#143264"),
-                "data_auditoria": st.column_config.TextColumn("Última Auditoria")}
-        )
-        if len(selecao.selection.rows) > 0:
-            popup_auditoria(int(df.iloc[selecao.selection.rows[0]]['id']))
+        st.dataframe(df[['id', 'nome_projeto', 'gerente_projeto', 'Status IA', 'Progresso %', 'data_auditoria']], use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row", column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(format="%.1f%%", color="#143264")})
         
         # Apuração de Resultados
         st.markdown("### 📈 Apuração de Resultados")
@@ -357,6 +347,7 @@ elif modo == "Dashboard Regional":
         )       
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

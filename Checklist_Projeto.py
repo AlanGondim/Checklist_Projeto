@@ -163,18 +163,23 @@ def popup_auditoria(projeto_id):
 # --- INTERFACE ---
 st.set_page_config(page_title="Hub de Inteligência MV", layout="wide")
 
+# --- CUSTOM CSS PARA CORES AZUL MARINHO (#143264) ---
 st.markdown("""
     <style>
-    /* Altera a cor do intervalo selecionado no date_input */
+    /* Cor do intervalo no calendário */
     div[data-baseweb="calendar"] div[aria-selected="true"] {
+        background-color: #143264 !important;
+    }
+    div[data-baseweb="calendar"] div[data-highlighted="true"] {
+        background-color: rgba(20, 50, 100, 0.2) !important;
+    }
+    /* Cor das tags selecionadas no Multiselect */
+    span[data-baseweb="tag"] {
         background-color: #143264 !important;
         color: white !important;
     }
-    /* Estilo para o preenchimento entre as datas inicial e final */
-    div[data-baseweb="calendar"] div[data-highlighted="true"] {
-        background-color: rgba(20, 50, 100, 0.2) !important;
-        color: #143264 !important;
-    }
+    /* Estilização geral dos botões primários */
+    .stButton>button { border-radius: 5px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -272,12 +277,28 @@ if modo == "Checklist Operacional":
 
 elif modo == "Dashboard Regional":
     st.markdown("<h2 style='color: #143264;'>📊 Dashboard de Governança</h2>", unsafe_allow_html=True)
-   # --- SEÇÃO DE FILTROS ---
+   
+    # --- LÓGICA DO BOTÃO LIMPAR FILTROS ---
+    if "data_range" not in st.session_state:
+        st.session_state.data_range = [date.today().replace(day=1), date.today()]
+    if "fases_selected" not in st.session_state:
+        st.session_state.fases_selected = []
+
+    def limpar_filtros():
+        st.session_state.data_range = [date.today().replace(day=1), date.today()]
+        st.session_state.fases_selected = []
+
     with st.expander("🔍 Filtros de Consulta e Apuração", expanded=True):
         c1, c2, c3 = st.columns([2, 2, 1])
-        data_range = c1.date_input("Período de Auditoria", [date.today().replace(day=1), date.today()], format="DD/MM/YYYY")
-        fase_filtro = c2.multiselect("Filtrar por Fase", list(METODOLOGIA.keys()))
-        if c3.button("Limpar Filtros"): st.rerun()   
+        data_range = c1.date_input("Período de Auditoria", value=st.session_state.data_range, format="DD/MM/YYYY", key="data_range_input")
+        st.session_state.data_range = data_range # Sincroniza
+        
+        fase_filtro = c2.multiselect("Filtrar por Fase", list(METODOLOGIA.keys()), default=st.session_state.fases_selected, key="fase_filtro_input")
+        st.session_state.fases_selected = fase_filtro # Sincroniza
+        
+        c3.markdown("<br>", unsafe_allow_html=True)
+        c3.button("Limpar Filtros", on_click=limpar_filtros, use_container_width=True)
+    
     projs = session.query(Projeto).all()
     if projs:
         df_list = []
@@ -298,6 +319,8 @@ elif modo == "Dashboard Regional":
             df_list.append(d)
           
         df = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
+
+        # Filtro de Data
         if len(data_range) == 2:
             df = df[(df['data_aud_raw'] >= str(data_range[0])) & (df['data_aud_raw'] <= str(data_range[1])) | (df['data_auditoria'] == "Não Auditado")]
 
@@ -305,11 +328,13 @@ elif modo == "Dashboard Regional":
         selecao = st.dataframe(
             df[['id', 'nome_projeto', 'gerente_projeto', 'Status IA', 'Progresso %', 'data_auditoria']], 
             use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
-            column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(format="%.1f%%", color="#143264")}
+            column_config={
+                "id": None, 
+                "Progresso %": st.column_config.ProgressColumn(format="%.1f%%", color="#143264"),
+                "data_auditoria": st.column_config.TextColumn("Última Auditoria")}
         )
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df.iloc[selecao.selection.rows[0]]['id']))
-
         
         # Apuração de Resultados
         st.markdown("### 📈 Apuração de Resultados")
@@ -332,6 +357,7 @@ elif modo == "Dashboard Regional":
         )       
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

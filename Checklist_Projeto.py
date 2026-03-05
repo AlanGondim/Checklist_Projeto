@@ -278,37 +278,26 @@ if modo == "Checklist Operacional":
 elif modo == "Dashboard Regional":
     st.markdown("<h2 style='color: #143264;'>📊 Dashboard de Governança</h2>", unsafe_allow_html=True)
    
-  # --- LÓGICA DE FILTROS COM SESSION STATE PARA LIMPEZA ---
-    if 'filtros_dashboard' not in st.session_state:
-        st.session_state.filtros_dashboard = {
-            'data': [date.today().replace(day=1), date.today()],
-            'fases': []
-        }
+  # --- LÓGICA DE FILTROS ---
+    def reset_filters():
+        st.session_state.d_range = [date.today().replace(day=1), date.today()]
+        st.session_state.f_selected = []
 
-    def limpar_filtros_callback():
-        st.session_state.filtros_dashboard['data'] = [date.today().replace(day=1), date.today()]
-        st.session_state.filtros_dashboard['fases'] = []
+    if 'd_range' not in st.session_state: reset_filters()
 
     with st.expander("🔍 Filtros de Consulta", expanded=True):
         c1, c2, c3 = st.columns([2, 2, 1])
+        # Filtro de data vinculado à key do session_state
+        data_range_val = c1.date_input("Período", value=st.session_state.d_range, format="DD/MM/YYYY", key="d_range_input")
+        # Filtro de fase vinculado à key do session_state
+        fase_filtro_val = c2.multiselect("Filtrar Fase", list(METODOLOGIA.keys()), default=st.session_state.f_selected, key="f_selected_input")
         
-        # Atribuímos o session_state diretamente à variável local
-        st.session_state.filtros_dashboard['data'] = c1.date_input(
-            "Período de Auditoria", 
-            value=st.session_state.filtros_dashboard['data'],
-            format="DD/MM/YYYY"
-        )
-        st.session_state.filtros_dashboard['fases'] = c2.multiselect(
-            "Filtrar por Fase", 
-            list(METODOLOGIA.keys()),
-            default=st.session_state.filtros_dashboard['fases']
-        )
         c3.markdown("<br>", unsafe_allow_html=True)
-        c3.button("Limpar Filtros", on_click=limpar_filtros_callback, use_container_width=True)
-
-    # Variáveis locais para o filtro (evita o NameError)
-    current_data_range = st.session_state.filtros_dashboard['data']
-    current_fases = st.session_state.filtros_dashboard['fases']
+        # O botão agora limpa as chaves específicas usadas nos widgets
+        if c3.button("Limpar Filtros", use_container_width=True):
+            st.session_state.d_range_input = [date.today().replace(day=1), date.today()]
+            st.session_state.f_selected_input = []
+            st.rerun()
 
     projs = session.query(Projeto).all()
     if projs:
@@ -316,9 +305,8 @@ elif modo == "Dashboard Regional":
         for p in projs:
             d = vars(p).copy()
             ultima_aud = session.query(AuditoriaHistorico).filter(AuditoriaHistorico.projeto_id == p.id).order_by(desc(AuditoriaHistorico.timestamp)).first()
-            d['data_aud_raw'] = ultima_aud.data_auditoria if ultima_aud else "0000-00-00"
+            d['data_raw'] = ultima_aud.data_auditoria if ultima_aud else "0000-00-00"
             d['data_auditoria'] = datetime.strptime(ultima_aud.data_auditoria, '%Y-%m-%d').strftime('%d/%m/%Y') if ultima_aud else "Não Auditado"
-            
             itens = session.query(StatusItem).filter(StatusItem.projeto_id == p.id).all()
             d['Progresso %'] = round((sum(1 for i in itens if i.entregue) / sum(len(v) for v in METODOLOGIA.values())) * 100, 1) if itens else 0.0
             d['Status IA'] = calcular_status_ia(p.data_inicio, p.data_entrada_producao, p.data_termino)
@@ -326,33 +314,34 @@ elif modo == "Dashboard Regional":
         
         df = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
         
-        # Filtro de Data Robusto (Verifica se range tem 2 datas)
-        if isinstance(current_data_range, list) and len(current_data_range) == 2:
-            df = df[(df['data_aud_raw'] >= str(current_data_range[0])) & 
-                    (df['data_aud_raw'] <= str(current_data_range[1])) | 
-                    (df['data_auditoria'] == "Não Auditado")]
-        
-        # Filtro de Fase
-        if current_fases:
-            df = df[df['Status IA'].apply(lambda x: any(f in x for f in current_fases))]
+        # Aplicar filtros (Usando os valores atuais dos widgets)
+        if len(data_range_val) == 2:
+            df = df[(df['data_raw'] >= str(data_range_val[0])) & (df['data_raw'] <= str(data_range_val[1])) | (df['data_auditoria'] == "Não Auditado")]
+        if fase_filtro_val:
+            df = df[df['Status IA'].apply(lambda x: any(f in x for f in fase_filtro_val))]
 
-        st.dataframe(
+        # --- CORREÇÃO DO SELECTION ---
+        # Capturamos a seleção diretamente do retorno do dataframe
+        selecao = st.dataframe(
             df[['id', 'nome_projeto', 'gerente_projeto', 'Status IA', 'Progresso %', 'data_auditoria']], 
-            use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
+            use_container_width=True, 
+            hide_index=True, 
+            on_select="rerun", 
+            selection_mode="single-row", 
             column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(format="%.1f%%", color="#143264")}
         )
         
+        # Apuração
+        st.markdown("---")
         m1, m2, m3 = st.columns(3)
         m1.metric("Projetos", len(df))
         m2.metric("Média Performance", f"{df['Progresso %'].mean():.1f}%" if not df.empty else "0%")
         m3.metric("Conformidade 100%", len(df[df['Progresso %'] == 100]))
-
-        # Seleção de linha para o Popup
-        curr_sel = st.context.selection.get("rows", [])
-        if curr_sel: popup_auditoria(int(df.iloc[curr_sel[0]]['id']))
-
-
-
+        
+        # Lógica de Popup corrigida (usando o objeto retornado pelo st.dataframe)
+        if selecao.selection.rows:
+            selected_index = selecao.selection.rows[0]
+            popup_auditoria(int(df.iloc[selected_index]['id']))
 
 
 

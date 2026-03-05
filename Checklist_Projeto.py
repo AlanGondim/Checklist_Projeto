@@ -162,6 +162,22 @@ def popup_auditoria(projeto_id):
 
 # --- INTERFACE ---
 st.set_page_config(page_title="Hub de Inteligência MV", layout="wide")
+
+st.markdown("""
+    <style>
+    /* Altera a cor do intervalo selecionado no date_input */
+    div[data-baseweb="calendar"] div[aria-selected="true"] {
+        background-color: #143264 !important;
+        color: white !important;
+    }
+    /* Estilo para o preenchimento entre as datas inicial e final */
+    div[data-baseweb="calendar"] div[data-highlighted="true"] {
+        background-color: rgba(20, 50, 100, 0.2) !important;
+        color: #143264 !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 modo = st.sidebar.radio("Navegação", ["Checklist Operacional", "Dashboard Regional"])
 
 if modo == "Checklist Operacional":
@@ -316,6 +332,7 @@ elif modo == "Dashboard Regional":
         )       
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

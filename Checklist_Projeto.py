@@ -127,7 +127,7 @@ def popup_auditoria(projeto_id):
     with tab2:
         hist = session.query(AuditoriaHistorico).filter(AuditoriaHistorico.projeto_id == proj.id).order_by(desc(AuditoriaHistorico.timestamp)).all()
         if hist:
-            df_hist = pd.DataFrame([{"Data": h.data_auditoria, format="DD/MM/YYYY", "Auditor": h.responsavel, "Performance": f"{h.progresso_total:.1f}%"} for h in hist])
+            df_hist = pd.DataFrame([{"Data": h.data_auditoria, "Auditor": h.responsavel, "Performance": f"{h.progresso_total:.1f}%"} for h in hist])
             st.table(df_hist)
 
     with tab3:
@@ -259,6 +259,7 @@ elif modo == "Dashboard Regional":
         )
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

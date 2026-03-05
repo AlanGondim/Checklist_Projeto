@@ -4,7 +4,7 @@ import numpy as np
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, desc, text, inspect
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from datetime import datetime
+from datetime import datetime, date
 import os
 
 # --- DATABASE SETUP ---
@@ -294,6 +294,7 @@ elif modo == "Dashboard Regional":
         )       
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

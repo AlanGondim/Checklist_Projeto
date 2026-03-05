@@ -70,6 +70,27 @@ MAPA_COLUNAS = {
     "Go Live": "go_live", "Operação Assistida": "operacao_assistida", "Finalização": "finalizacao"
 }
 
+# --- LÓGICA DE STATUS IA ---
+def calcular_status_ia(d_ini, d_prod, d_fim):
+    try:
+        hoje = date.today()
+        # Converte strings para date objects
+        ini = datetime.strptime(d_ini, '%Y-%m-%d').date()
+        prod = datetime.strptime(d_prod, '%Y-%m-%d').date()
+        fim = datetime.strptime(d_fim, '%Y-%m-%d').date()
+
+        if hoje < ini: return "🔵 Planejamento"
+        if hoje >= fim: return "✅ Finalizado"
+        if hoje >= prod: return "🚀 Operação Assistida"
+        
+        # Cálculo de proximidade do Go-Live
+        dias_para_prod = (prod - hoje).days
+        if dias_para_prod <= 15: return "⚠️ Go-Live Próximo"
+        
+        return "⚙️ Em Implantação"
+    except:
+        return "⚪ Sem Dados"
+
 # --- POPUP DE AUDITORIA ---
 @st.dialog("📋 Auditoria de Rastreabilidade Integral", width="large")
 def popup_auditoria(projeto_id):
@@ -242,27 +263,57 @@ if modo == "Checklist Operacional":
 
 elif modo == "Dashboard Regional":
     st.markdown("<h2 style='color: #143264;'>📊 Dashboard de Governança</h2>", unsafe_allow_html=True)
+
+    # --- SEÇÃO DE FILTROS ---
+    with st.expander("🔍 Filtros de Consulta e Apuração", expanded=True):
+        c1, c2, c3 = st.columns([2, 2, 1])
+        data_range = c1.date_input("Período de Auditoria", [date.today().replace(day=1), date.today()])
+        fase_filtro = c2.multiselect("Filtrar por Fase", list(METODOLOGIA.keys()))
+        if c3.button("Limpar Filtros"): st.rerun()
+    
     projs = session.query(Projeto).all()
     if projs:
-        # Lógica de cálculo dinâmico para a escala de progresso do dashboard
         df_list = []
         for p in projs:
             d = vars(p).copy()
+            # Busca última auditoria no histórico para corrigir o "None"
+            ultima_aud = session.query(AuditoriaHistorico).filter(AuditoriaHistorico.projeto_id == p.id).order_by(desc(AuditoriaHistorico.timestamp)).first()
+            d['data_auditoria'] = ultima_aud.data_auditoria if ultima_aud else "Não Auditado"
+            
+            # Cálculo de Progresso
             itens = session.query(StatusItem).filter(StatusItem.projeto_id == p.id).all()
-            if itens:
-                d['Progresso %'] = round((sum(1 for i in itens if i.entregue) / sum(len(v) for v in METODOLOGIA.values())) * 100, 1)
-            else:
-                d['Progresso %'] = 0.0
+            d['Progresso %'] = round((sum(1 for i in itens if i.entregue) / sum(len(v) for v in METODOLOGIA.values())) * 100, 1) if itens else 0.0
+            
+            # IA de Status
+            d['Status IA'] = calcular_status_ia(p.data_inicio, p.data_entrada_producao, p.data_termino)
             df_list.append(d)
             
         df = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
+        
+        # Aplicar Filtros no DataFrame
+        if len(data_range) == 2:
+            df = df[(df['data_auditoria'] >= str(data_range[0])) & (df['data_auditoria'] <= str(data_range[1])) | (df['data_auditoria'] == "Não Auditado")]
+
+        # Apuração de Resultados
+        st.markdown("### 📈 Apuração de Resultados")
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Projetos na Lista", len(df))
+        m2.metric("Média de Performance", f"{df['Progresso %'].mean():.1f}%")
+        m3.metric("Conformidade 100%", len(df[df['Progresso %'] == 100]))
+
         df_display = df.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
         
+        cols_view = ['id', 'nome_projeto', 'gerente_projeto', 'Status IA', 'Progresso %', 'data_auditoria']
         selecao = st.dataframe(
-            df_display[['id', 'nome_projeto', 'gerente_projeto', 'Progresso %', 'data_auditoria']], 
+            df_display[cols_view], 
             use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
-            column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%", color="#143264")}
+            column_config={
+                "id": None, 
+                "Progresso %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%", color="#143264"),
+                "data_auditoria": st.column_config.TextColumn("Última Auditoria")
+            }
         )
+        
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
 

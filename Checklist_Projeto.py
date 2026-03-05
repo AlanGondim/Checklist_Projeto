@@ -326,27 +326,16 @@ elif modo == "Dashboard Regional":
 
         st.dataframe(df[['id', 'nome_projeto', 'gerente_projeto', 'Status IA', 'Progresso %', 'data_auditoria']], use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row", column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(format="%.1f%%", color="#143264")})
         
-        # Apuração de Resultados
-        st.markdown("### 📈 Apuração de Resultados")
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Projetos na Lista", len(df))
-        m2.metric("Média de Performance", f"{df['Progresso %'].mean():.1f}%")
-        m3.metric("Conformidade 100%", len(df[df['Progresso %'] == 100]))
+        # Apuração
+        st.markdown("---")
+        m1, m2 = st.columns(2)
+        m1.metric("Projetos Filtrados", len(df))
+        m2.metric("Média Performance", f"{df['Progresso %'].mean():.1f}%" if not df.empty else "0%")
+        
+        # Trigger do Popup (on selection)
+        curr_sel = st.context.selection.get("rows", [])
+        if curr_sel: popup_auditoria(int(df.iloc[curr_sel[0]]['id']))
 
-        df_display = df.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
-     
-        cols_view = ['id', 'nome_projeto', 'gerente_projeto', 'Status IA', 'Progresso %', 'data_auditoria']
-        selecao = st.dataframe(
-            df_display[cols_view], 
-            use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
-            column_config={
-                "id": None, 
-                "Progresso %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%", color="#143264"),
-                "data_auditoria": st.column_config.TextColumn("Última Auditoria")
-            }
-        )       
-        if len(selecao.selection.rows) > 0:
-            popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
 
 
 

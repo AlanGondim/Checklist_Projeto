@@ -281,6 +281,19 @@ elif modo == "Dashboard Regional":
             d['Status IA'] = calcular_status_ia(p.data_inicio, p.data_entrada_producao, p.data_termino)
             df_list.append(d)
           
+df = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
+        if len(data_range) == 2:
+            df = df[(df['data_aud_raw'] >= str(data_range[0])) & (df['data_aud_raw'] <= str(data_range[1])) | (df['data_auditoria'] == "Não Auditado")]
+
+        st.markdown(f"### 📈 Projetos Encontrados: {len(df)}")
+        selecao = st.dataframe(
+            df[['id', 'nome_projeto', 'gerente_projeto', 'Status IA', 'Progresso %', 'data_auditoria']], 
+            use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
+            column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(format="%.1f%%", color="#143264")}
+        )
+        if len(selecao.selection.rows) > 0:
+            popup_auditoria(int(df.iloc[selecao.selection.rows[0]]['id']))
+
         
         # Apuração de Resultados
         st.markdown("### 📈 Apuração de Resultados")
@@ -303,6 +316,7 @@ elif modo == "Dashboard Regional":
         )       
         if len(selecao.selection.rows) > 0:
             popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
+
 
 
 

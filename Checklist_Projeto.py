@@ -278,96 +278,78 @@ if modo == "Checklist Operacional":
 elif modo == "Dashboard Regional":
     st.markdown("<h2 style='color: #143264;'>📊 Dashboard de Governança</h2>", unsafe_allow_html=True)
    
-  # --- LÓGICA DE FILTROS BLINDADA ---
-    def reset_filters():
-        st.session_state.d_range_key = [date.today().replace(day=1), date.today()]
-        st.session_state.f_selected_key = []
+  # --- LÓGICA DE FILTROS COM SESSION STATE PARA LIMPEZA ---
+    if 'filtros_dashboard' not in st.session_state:
+        st.session_state.filtros_dashboard = {
+            'data': [date.today().replace(day=1), date.today()],
+            'fases': []
+        }
 
-    if 'd_range_key' not in st.session_state:
-        st.session_state.d_range_key = [date.today().replace(day=1), date.today()]
-    if 'f_selected_key' not in st.session_state:
-        st.session_state.f_selected_key = []
+    def limpar_filtros_callback():
+        st.session_state.filtros_dashboard['data'] = [date.today().replace(day=1), date.today()]
+        st.session_state.filtros_dashboard['fases'] = []
 
     with st.expander("🔍 Filtros de Consulta", expanded=True):
         c1, c2, c3 = st.columns([2, 2, 1])
         
-        # O uso do key direto no session_state garante a limpeza funcional
-        filtro_data = c1.date_input(
+        # Atribuímos o session_state diretamente à variável local
+        st.session_state.filtros_dashboard['data'] = c1.date_input(
             "Período de Auditoria", 
-            value=st.session_state.d_range_key, 
-            format="DD/MM/YYYY", 
-            key="d_range_key"
+            value=st.session_state.filtros_dashboard['data'],
+            format="DD/MM/YYYY"
         )
-        
-        filtro_fase = c2.multiselect(
-            "Filtrar Fase", 
-            list(METODOLOGIA.keys()), 
-            default=st.session_state.f_selected_key, 
-            key="f_selected_key"
+        st.session_state.filtros_dashboard['fases'] = c2.multiselect(
+            "Filtrar por Fase", 
+            list(METODOLOGIA.keys()),
+            default=st.session_state.filtros_dashboard['fases']
         )
-        
         c3.markdown("<br>", unsafe_allow_html=True)
-        c3.button("Limpar Filtros", on_click=reset_filters, use_container_width=True)
-    
+        c3.button("Limpar Filtros", on_click=limpar_filtros_callback, use_container_width=True)
+
+    # Variáveis locais para o filtro (evita o NameError)
+    current_data_range = st.session_state.filtros_dashboard['data']
+    current_fases = st.session_state.filtros_dashboard['fases']
+
     projs = session.query(Projeto).all()
     if projs:
         df_list = []
         for p in projs:
             d = vars(p).copy()
             ultima_aud = session.query(AuditoriaHistorico).filter(AuditoriaHistorico.projeto_id == p.id).order_by(desc(AuditoriaHistorico.timestamp)).first()
-            
-            # Correção da data_auditoria formatada para exibição
-            d['data_aud_raw'] = ultima_aud.data_auditoria if ultima_aud else "9999-99-99" # Para filtro
+            d['data_aud_raw'] = ultima_aud.data_auditoria if ultima_aud else "0000-00-00"
             d['data_auditoria'] = datetime.strptime(ultima_aud.data_auditoria, '%Y-%m-%d').strftime('%d/%m/%Y') if ultima_aud else "Não Auditado"
-
-          
-            # Cálculo de Progresso
+            
             itens = session.query(StatusItem).filter(StatusItem.projeto_id == p.id).all()
             d['Progresso %'] = round((sum(1 for i in itens if i.entregue) / sum(len(v) for v in METODOLOGIA.values())) * 100, 1) if itens else 0.0
-            # IA Status
             d['Status IA'] = calcular_status_ia(p.data_inicio, p.data_entrada_producao, p.data_termino)
             df_list.append(d)
-          
+        
         df = pd.DataFrame(df_list).drop_duplicates(subset=['nome_projeto'])
+        
+        # Filtro de Data Robusto (Verifica se range tem 2 datas)
+        if isinstance(current_data_range, list) and len(current_data_range) == 2:
+            df = df[(df['data_aud_raw'] >= str(current_data_range[0])) & 
+                    (df['data_aud_raw'] <= str(current_data_range[1])) | 
+                    (df['data_auditoria'] == "Não Auditado")]
+        
+        # Filtro de Fase
+        if current_fases:
+            df = df[df['Status IA'].apply(lambda x: any(f in x for f in current_fases))]
 
-        # Filtro de Data
-        if len(data_range) == 2:
-            df = df[(df['data_aud_raw'] >= str(data_range[0])) & (df['data_aud_raw'] <= str(data_range[1])) | (df['data_auditoria'] == "Não Auditado")]
-
-        st.markdown(f"### 📈 Projetos Encontrados: {len(df)}")
-        selecao = st.dataframe(
+        st.dataframe(
             df[['id', 'nome_projeto', 'gerente_projeto', 'Status IA', 'Progresso %', 'data_auditoria']], 
             use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
-            column_config={
-                "id": None, 
-                "Progresso %": st.column_config.ProgressColumn(format="%.1f%%", color="#143264"),
-                "data_auditoria": st.column_config.TextColumn("Última Auditoria")}
+            column_config={"id": None, "Progresso %": st.column_config.ProgressColumn(format="%.1f%%", color="#143264")}
         )
-        if len(selecao.selection.rows) > 0:
-            popup_auditoria(int(df.iloc[selecao.selection.rows[0]]['id']))
         
-        # Apuração de Resultados
-        st.markdown("### 📈 Apuração de Resultados")
         m1, m2, m3 = st.columns(3)
-        m1.metric("Projetos na Lista", len(df))
-        m2.metric("Média de Performance", f"{df['Progresso %'].mean():.1f}%")
+        m1.metric("Projetos", len(df))
+        m2.metric("Média Performance", f"{df['Progresso %'].mean():.1f}%" if not df.empty else "0%")
         m3.metric("Conformidade 100%", len(df[df['Progresso %'] == 100]))
 
-        df_display = df.rename(columns={v: k for k, v in MAPA_COLUNAS.items()})
-     
-        cols_view = ['id', 'nome_projeto', 'gerente_projeto', 'Status IA', 'Progresso %', 'data_auditoria']
-        selecao = st.dataframe(
-            df_display[cols_view], 
-            use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row",
-            column_config={
-                "id": None, 
-                "Progresso %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%", color="#143264"),
-                "data_auditoria": st.column_config.TextColumn("Última Auditoria")
-            }
-        )       
-        if len(selecao.selection.rows) > 0:
-            popup_auditoria(int(df_display.iloc[selecao.selection.rows[0]]['id']))
-
+        # Seleção de linha para o Popup
+        curr_sel = st.context.selection.get("rows", [])
+        if curr_sel: popup_auditoria(int(df.iloc[curr_sel[0]]['id']))
 
 
 
